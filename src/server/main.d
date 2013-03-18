@@ -26,7 +26,18 @@ DEALINGS IN THE SOFTWARE.
 */
 module main;
 
-void main()
-{
+import vibe.core.net;
+import vibe.core.core;
+import std.stdio;
 
+int main(string[] args)
+{
+	listenTcp(7, 
+		(conn) 
+		{
+			conn.write(conn); 
+		}
+		, "127.0.0.1");
+
+	return runEventLoop();
 }

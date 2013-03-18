@@ -28,9 +28,14 @@ module main;
 
 import derelict.tcod.libtcod;
 
+import vibe.core.net;
+
 import std.stdio;
 import std.string;
 import std.conv;
+
+import core.time;
+import core.thread;
 
 enum VERSION = "0.0.1";
 
@@ -45,7 +50,19 @@ void dbg(T...)(T args)
 void main(string[] args)
 {
 	DerelictTCOD.load();
-	
+
+	auto conn = connectTcp("127.0.0.1", 7);
+	assert(conn.connected);
+
+	ubyte[] sendArr = [4,8,15,16,23,42];
+	conn.write(sendArr, true);
+	//Thread.sleep(dur!"seconds"(1));
+
+	ubyte[] arr = new ubyte[6];
+	conn.waitForData(dur!"seconds"(1));
+	conn.read(arr);
+	writeln(arr);
+
 	TCOD_console_init_root(CON_W, CON_H, "Dust & Blood v"~VERSION, false, TCOD_RENDERER_OPENGL);
 	while( !TCOD_console_is_window_closed() )
 	{

@@ -23,11 +23,13 @@ static this()
 		//"GLFW3": 		"../dependencies/GLFW3",
 		//"FreeImage": 	"../dependencies/FreeImage",
 		"cl4d": 		"../dependencies/cl4d",
+		"Vibe":			"../dependencies/vibe.d",
 	];
 
 	serverDepends = 
 	[
 		"Derelict3": 	"../dependencies/Derelict3",
+		"Vibe":			"../dependencies/vibe.d",
 	];
 
 	derelictLibs =
@@ -92,6 +94,12 @@ void compileDerelict(string libPath)
 		system("cd "~libPath~`/build && dmd build.d && ./build`);	
 }
 
+void compileVibe(string libPath)
+{
+	writeln("Building vibe...");
+	system("cd "~libPath~" && rdmd compile.d all debug");
+}
+
 //======================================================================
 //							Main part
 //======================================================================
@@ -103,6 +111,7 @@ int main(string[] args)
 
 	addLibraryFiles("Derelict3", "lib", derelictLibs, ["import"], &compileDerelict);
 	addLibraryFiles("cl4d", ".", ["OpenCL","cl4d"], ["."], &compileCl4d);
+	addLibraryFiles("Vibe", ".", ["vibe"], ["source"], &compileVibe);
 	//checkSharedLibraries("GLFW3", ["glfw3"], &compileGLFW3);
 	//checkSharedLibraries("FreeImage", ["freeimage"], &compileFreeImage);
 
@@ -116,6 +125,7 @@ int main(string[] args)
 	setDependPaths(serverDepends);
 
 	addLibraryFiles("Derelict3", "lib", derelictLibs, ["import"], &compileDerelict);
+	addLibraryFiles("Vibe", ".", ["vibe"], ["source"], &compileVibe);
 
 	addSource("../src/server");
 	addSource("../src/util");

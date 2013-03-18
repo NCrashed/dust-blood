@@ -29,6 +29,9 @@ module util.worldgen;
 // world generator
 // this was mostly generated with libtcod 1.4.2 heightmap tool !
 
+static if(false) // temp disable
+{
+
 import derelict.tcod.libtcod;
 import std.math;
 import std.stdio;
@@ -62,6 +65,11 @@ public
 }
 package
 {
+	alias TCOD_color_t TCODColor;
+	alias TCOD_heightmap_t TCODHeightMap;
+	alias TCOD_image_t TCODImage;
+	alias TCOD_random_t TCODRandom;
+
 	void dbg(T...)(T args)
 	{
 		debug writeln(text(args));
@@ -180,7 +188,7 @@ package
 		TCODColor(80,3,0), 		// 30 °C
 	];
 
-	static T clamp(T min, T max, T val) pure nothrow
+	static T clamp(T)(T min, T max, T val) pure nothrow
 	{
 		return val < min ? min : (val > max ? max : val);
 	}
@@ -1535,4 +1543,6 @@ class WorldGenerator
 		    return EClimate.TROPICAL;			
 		}	
 	}
+}
+
 }

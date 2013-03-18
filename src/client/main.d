@@ -27,12 +27,12 @@ DEALINGS IN THE SOFTWARE.
 module main;
 
 import derelict.tcod.libtcod;
-import util.wordgen;
 
+import std.stdio;
 import std.string;
 import std.conv;
 
-enum VERSION = "0.1.0";
+enum VERSION = "0.0.1";
 
 enum CON_W = 80;
 enum CON_H = 50;
@@ -42,6 +42,21 @@ void dbg(T...)(T args)
 	debug writeln(text(args));
 }
 
+void main(string[] args)
+{
+	DerelictTCOD.load();
+	
+	TCOD_console_init_root(CON_W, CON_H, "Dust & Blood v"~VERSION, false, TCOD_RENDERER_OPENGL);
+	while( !TCOD_console_is_window_closed() )
+	{
+		TCOD_sys_check_for_event(TCOD_EVENT_KEY_PRESS, null, null);
+		TCOD_console_clear(null);
+		TCOD_console_set_char(null, 40, 25, '@');
+		TCOD_console_flush();
+	}
+}
+
+/*
 WorldGenerator worldGen;
 
 // world map panning
@@ -94,7 +109,7 @@ TCODColor getMapShadedColor(float worldX,float worldY,bool clouds)
 void render() 
 {
 	// subcell resolution image
-	static TCODImage map(CON_W*2,CON_H*2);
+	static TCODImage map = TCODImage(CON_W*2,CON_H*2);
 	// compute the map image
 	for (int px=0; px <2*CON_W; px++) {
 		for (int py=0; py <2*CON_H; py++) {
@@ -172,3 +187,4 @@ int main (string[] args)
 	}
 	return 0;	
 }
+*/

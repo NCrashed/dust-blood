@@ -25,11 +25,17 @@ static this()
 		"cl4d": 		"../dependencies/cl4d",
 	];
 
+	serverDepends = 
+	[
+		"Derelict3": 	"../dependencies/Derelict3",
+	];
+
 	derelictLibs =
 	[
 		"DerelictGL3",
 		//"DerelictGLFW3",
 		"DerelictUtil",
+		"DerelictTCOD",
 		//"DerelictFI",
 	];
 }
@@ -108,6 +114,8 @@ int main(string[] args)
 	// Сервер
 	addCompTarget("server", "../bin", "server", BUILD.APP);
 	setDependPaths(serverDepends);
+
+	addLibraryFiles("Derelict3", "lib", derelictLibs, ["import"], &compileDerelict);
 
 	addSource("../src/server");
 	addSource("../src/util");

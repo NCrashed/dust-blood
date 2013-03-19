@@ -27,60 +27,30 @@ DEALINGS IN THE SOFTWARE.
 module main;
 
 import derelict.tcod.libtcod;
+import vibe.core.driver;
+import vibe.core.core;
 
-import vibe.core.net;
-import util.iprotocol;
+import connection;
 import util.messages;
 import util.log;
 
 import std.stdio;
 import std.string;
 import std.conv;
+import std.concurrency;
+import std.c.stdlib;
 
-import core.time;
 import core.thread;
+import core.time;
 
 enum VERSION = "0.0.1";
 
 enum CON_W = 80;
 enum CON_H = 50;
 
-void dbg(T...)(T args)
+void drawThread()
 {
-	debug writeln(text(args));
-}
-
-void main(string[] args)
-{
-	DerelictTCOD.load();
-
-	auto conn = connectTcp("127.0.0.1", 7);
-	assert(conn.connected);
-	//writeln("Connection to server established!");
-	writeNoticeLog("Connection to server established!");
-
-	
-	auto stream = constructMessage!MessHello();
-	conn.write(stream, true);
-
-	conn.waitForData(dur!"seconds"(1));
-	ubyte[] buff = new ubyte[cast(size_t)conn.leastSize];
-
-	try
-	{
-		conn.read(buff);
-	} catch(Exception e)
-	{
-		writeFatalLog("Failed to read data from connection!");
-		return;
-	}
-	
-	TcpMessage[] msgs;
-	size_t summ, rest;
-	readObjects(buff, msgs, summ, rest);
-	foreach(msg; msgs)
-		msg(conn);	
-
+	Tid parentTid = receiveOnly!Tid;
 	TCOD_console_init_root(CON_W, CON_H, "Dust & Blood v"~VERSION, false, TCOD_RENDERER_OPENGL);
 	while( !TCOD_console_is_window_closed() )
 	{
@@ -89,6 +59,42 @@ void main(string[] args)
 		TCOD_console_set_char(null, 40, 25, '@');
 		TCOD_console_flush();
 	}
+
+	parentTid.send(false);
+}
+
+void main(string[] args)
+{
+	DerelictTCOD.load();
+	establishConnection("127.0.0.1", 7);
+
+	while(!isConnected())
+	{
+		Thread.sleep(dur!"seconds"(1));
+	}
+
+	sendMsg!MessHello();
+
+	Tid drawTid = spawn(&drawThread);
+	drawTid.send(thisTid);
+
+	bool running = true;
+	while(true)
+	{
+		receiveTimeout(dur!"msecs"(1), 
+			(bool b)
+			{
+				running = b;
+			});
+		if(!running) 
+		{
+			break;
+		}
+		processEvents();
+	}
+
+	DerelictTCOD.unload();
+	exit(0);
 }
 
 /*

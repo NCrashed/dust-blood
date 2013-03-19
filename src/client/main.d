@@ -29,6 +29,9 @@ module main;
 import derelict.tcod.libtcod;
 
 import vibe.core.net;
+import util.iprotocol;
+import util.messages;
+import util.log;
 
 import std.stdio;
 import std.string;
@@ -53,15 +56,30 @@ void main(string[] args)
 
 	auto conn = connectTcp("127.0.0.1", 7);
 	assert(conn.connected);
+	//writeln("Connection to server established!");
+	writeNoticeLog("Connection to server established!");
 
-	ubyte[] sendArr = [4,8,15,16,23,42];
-	conn.write(sendArr, true);
-	//Thread.sleep(dur!"seconds"(1));
+	
+	auto stream = constructMessage!MessHello();
+	conn.write(stream, true);
 
-	ubyte[] arr = new ubyte[6];
 	conn.waitForData(dur!"seconds"(1));
-	conn.read(arr);
-	writeln(arr);
+	ubyte[] buff = new ubyte[cast(size_t)conn.leastSize];
+
+	try
+	{
+		conn.read(buff);
+	} catch(Exception e)
+	{
+		writeFatalLog("Failed to read data from connection!");
+		return;
+	}
+	
+	TcpMessage[] msgs;
+	size_t summ, rest;
+	readObjects(buff, msgs, summ, rest);
+	foreach(msg; msgs)
+		msg(conn);	
 
 	TCOD_console_init_root(CON_W, CON_H, "Dust & Blood v"~VERSION, false, TCOD_RENDERER_OPENGL);
 	while( !TCOD_console_is_window_closed() )

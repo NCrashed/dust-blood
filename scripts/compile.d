@@ -118,7 +118,9 @@ int main(string[] args)
 	addSource("../src/client");
 	addSource("../src/util");
 
-	addCustomFlags("-D -Dd../docs ../docs/candydoc/candy.ddoc ../docs/candydoc/modules.ddoc -version=CL_VERSION_1_1");
+	addCustomFlags("-D -Dd../docs ../docs/candydoc/candy.ddoc ../docs/candydoc/modules.ddoc");
+	addCustomFlags("-version=CL_VERSION_1_1");
+	addCustomFlags("-version=CLIENT_SIDE");
 
 	// Сервер
 	addCompTarget("server", "../bin", "server", BUILD.APP);
@@ -131,7 +133,8 @@ int main(string[] args)
 	addSource("../src/util");
 	
 	addCustomFlags("-D -Dd../docs ../docs/candydoc/candy.ddoc ../docs/candydoc/modules.ddoc");
-
+	addCustomFlags("-version=SERVER_SIDE");
+	
 	checkProgram("dmd", "Cannot find dmd to compile project! You can get it from http://dlang.org/download.html");
 	// Компиляция!
 	return proceedCmd(args);

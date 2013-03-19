@@ -28,14 +28,39 @@ module main;
 
 import vibe.core.net;
 import vibe.core.core;
+import util.iprotocol;
+import util.messages;
+import util.log;
 import std.stdio;
+import core.time;
 
 int main(string[] args)
 {
 	listenTcp(7, 
 		(conn) 
 		{
-			conn.write(conn); 
+			TcpMessage[] msgs;
+			size_t summ, rest;
+			
+			while(conn.connected)
+			{
+				conn.waitForData(dur!"seconds"(5));
+				auto buff = new ubyte[cast(size_t)conn.leastSize];
+				try
+				{
+					conn.read(buff);
+				} catch(Exception e)
+				{
+					writeFatalLog("Connection read failed!");
+					conn.close();
+				}
+
+				readObjects(buff, msgs, summ, rest);
+				foreach(msg; msgs)
+				{
+					msg(conn);
+				}
+			}
 		}
 		, "127.0.0.1");
 

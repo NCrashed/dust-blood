@@ -53,6 +53,12 @@
 *				$(MYREF ArrayElementType)
 *			) 
 *		)
+*		$(TR
+*			$(TDNW Random)
+*			$(TD
+*				$(MYREF getRandomString)
+*			)
+*		)
 *	)
 *
 *	Macros:
@@ -64,6 +70,8 @@ import std.math;
 import std.traits;
 import std.algorithm : countUntil;
 import std.typetuple;
+import std.random;
+import std.array;
 
 /// fromStringz
 /**
@@ -924,4 +932,47 @@ unittest
 	static assert(is(ArrayElementType!(string[]) == string));
 	static assert(is(ArrayElementType!(shared bool[]) == shared bool));
 	static assert(is(ArrayElementType!(bool[]) == bool));
+}
+
+/// getRandomString
+/**
+*	Returns random string length of $(B size) using alphabet $(B alph), random generator $(B RandomGen) and function $(B seedFunc)
+*	to get seed.
+*	Example:
+*	------------
+*	assert(getRandomString(5).length == 5);
+*	assert(getRandomString(0).length == 0);
+*
+*	uint getSeed()
+*	{
+*		return 0;
+*	}
+*
+*	assert(getRandomString!("abc", Mt19937, getSeed)(3) == "bbc");	
+*	------------
+*/
+string getRandomString(string alph = "qwertyuiopp[]asdfghjkl;'zxcvbnm,./QWERTYUIOP{}ASDFGHJKL:ZXCVBNM<>1234567890",
+	 RandomGen = Mt19937, alias seedFunc = unpredictableSeed)(size_t size)
+{
+	RandomGen gen;
+	gen.seed(seedFunc());
+
+	auto app = appender!string();
+	foreach(i; 0..size)
+		app.put(alph[uniform(0, alph.length, gen)]);
+
+	return app.data;
+}
+
+unittest
+{
+	assert(getRandomString(5).length == 5);
+	assert(getRandomString(0).length == 0);
+
+	uint getSeed()
+	{
+		return 0;
+	}
+
+	assert(getRandomString!("abc", Mt19937, getSeed)(3) == "bbc");
 }

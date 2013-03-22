@@ -88,6 +88,16 @@ class MessHello : Client2ServerMess
 	}
 }
 
+class MessRequestMap : Client2ServerMess
+{
+	void opCall(TcpConnection conn) // server side
+	{
+		checkSide();
+
+		
+	}
+}
+
 // Client <= Server only
 interface Server2ClientMess : TcpMessage
 {

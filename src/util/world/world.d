@@ -24,17 +24,16 @@ FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 */
-module util.worldgen;
-
-// world generator
-// this was mostly generated with libtcod 1.4.2 heightmap tool !
-
-static if(false) // temp disable
-{
+module util.world.world;
 
 import derelict.tcod.libtcod;
+import std.container;
+import std.conv;
 import std.math;
 import std.stdio;
+import std.string;
+
+import util.log;
 
 public
 {
@@ -43,7 +42,8 @@ public
 	enum HM_HEIGHT = 400;
 
 	// biome and climate list. based on Whittaker Biome Diagram
-	enum EClimate {
+	enum EClimate 
+	{
 	    ARTIC_ALPINE,
 	    COLD,
 	    TEMPERATE,
@@ -54,7 +54,8 @@ public
 
 	// grassland : might be either grassland, shrubland or woodland depending on the vegetation level
 	// savanna : might be either savanna or thorn forest depending on the vegetation level
-	enum EBiome {
+	enum EBiome 
+	{
 		TUNDRA,
 	    COLD_DESERT, GRASSLAND, BOREAL_FOREST,
 	    TEMPERATE_FOREST, TROPICAL_MONTANE_FOREST,
@@ -62,31 +63,26 @@ public
 	    THORN_FOREST,
 	    NB_BIOMES
 	};	
+
+	static T clamp(T)(T min, T max, T val) pure nothrow
+	{
+		return val < min ? min : (val > max ? max : val);
+	}	
 }
 package
 {
-	alias TCOD_color_t TCODColor;
-	alias TCOD_heightmap_t TCODHeightMap;
-	alias TCOD_image_t TCODImage;
-	alias TCOD_random_t TCODRandom;
-
-	void dbg(T...)(T args)
-	{
-		debug writeln(text(args));
-	}
-
 	// temperature / precipitation Biome diagram (Whittaker diagram)
 	EBiome biomeDiagram[5][5] = [
 	    // artic/alpine climate (below -5°C)
-	    [ TUNDRA, TUNDRA, TUNDRA, TUNDRA, TUNDRA, ],
+	    [ EBiome.TUNDRA, EBiome.TUNDRA, EBiome.TUNDRA, EBiome.TUNDRA, EBiome.TUNDRA, ],
 	    // cold climate (-5 / 5 °C)
-	    [ COLD_DESERT, GRASSLAND, BOREAL_FOREST, BOREAL_FOREST, BOREAL_FOREST, ],
+	    [ EBiome.COLD_DESERT, EBiome.GRASSLAND, EBiome.BOREAL_FOREST, EBiome.BOREAL_FOREST, EBiome.BOREAL_FOREST, ],
 	    // temperate climate (5 / 15 °C)
-	    [ COLD_DESERT, GRASSLAND, TEMPERATE_FOREST, TEMPERATE_FOREST, TROPICAL_MONTANE_FOREST, ],
+	    [ EBiome.COLD_DESERT, EBiome.GRASSLAND, EBiome.TEMPERATE_FOREST, EBiome.TEMPERATE_FOREST, EBiome.TROPICAL_MONTANE_FOREST, ],
 	    // warm climate (15 - 20°C)
-	    [ HOT_DESERT, SAVANNA, TROPICAL_DRY_FOREST, TROPICAL_EVERGREEN_FOREST, TROPICAL_EVERGREEN_FOREST, ],
+	    [ EBiome.HOT_DESERT, EBiome.SAVANNA, EBiome.TROPICAL_DRY_FOREST, EBiome.TROPICAL_EVERGREEN_FOREST, EBiome.TROPICAL_EVERGREEN_FOREST, ],
 	    // tropical climate (above 20 °C)
-	    [ HOT_DESERT, THORN_FOREST, TROPICAL_DRY_FOREST, TROPICAL_EVERGREEN_FOREST, TROPICAL_EVERGREEN_FOREST, ],
+	    [ EBiome.HOT_DESERT, EBiome.THORN_FOREST, EBiome.TROPICAL_DRY_FOREST, EBiome.TROPICAL_EVERGREEN_FOREST, EBiome.TROPICAL_EVERGREEN_FOREST, ],
 	];
 
 	enum sandHeight		=	0.12f;
@@ -100,7 +96,9 @@ package
 	enum COLOR_KEY_MAX_SEA = 	(cast(int)(sandHeight*255)-1);
 	enum COLOR_KEY_MIN_LAND = 	(cast(int)(sandHeight*255));
 
-	static const int keyIndex[MAX_COLOR_KEY] = [0,
+	static const int keyIndex[MAX_COLOR_KEY] = 
+	[	
+		0,
 		COLOR_KEY_MAX_SEA,
 		COLOR_KEY_MIN_LAND,
 		cast(int)(grassHeight*255),
@@ -111,87 +109,90 @@ package
 		cast(int)(snowHeight*255)+10,
 		255
 	];
-	static const TCODColor keyColor[MAX_COLOR_KEY]= [
-		TCODColor(0,0,50),    	// deep water
-		TCODColor(20,20,200), 	// water-sand transition
-		TCODColor(134,180,101),	// sand
-		TCODColor(80,120,10),	// sand-grass transition
-		TCODColor(17,109,7), 	// grass
-		TCODColor(30,85,12), 	// grass-rock transisiton
-		TCODColor(64,70,20), 	// rock
-		TCODColor(120,140,40), 	// rock-snow transisiton
-		TCODColor(208,208,239), // snow
-		TCODColor(255,255,255)
+	static const TCOD_color_t keyColor[MAX_COLOR_KEY] = 
+	[
+		TCOD_color_t(0,0,50),    	// deep water
+		TCOD_color_t(20,20,200), 	// water-sand transition
+		TCOD_color_t(134,180,101),	// sand
+		TCOD_color_t(80,120,10),	// sand-grass transition
+		TCOD_color_t(17,109,7), 	// grass
+		TCOD_color_t(30,85,12), 	// grass-rock transisiton
+		TCOD_color_t(64,70,20), 	// rock
+		TCOD_color_t(120,140,40), 	// rock-snow transisiton
+		TCOD_color_t(208,208,239),  // snow
+		TCOD_color_t(255,255,255)
 	];
 
 	// altitude color map
 	enum MAX_ALT_KEY	=	8;
-	static const int altIndexes[MAX_ALT_KEY] = [
+	static const int altIndexes[MAX_ALT_KEY] = 
+	[
 		0,15,cast(int)(sandHeight*255),cast(int)(sandHeight*255)+1,
 		80,130,195,255
-		];
-	static const float altitudes[MAX_ALT_KEY] = [
-	     -2000,-1000,-100,0,500,1000,2500,4000	// in meters
-		];
-	static const TCODColor altColors[MAX_ALT_KEY]= [
-		TCODColor(24,165,255), 	// -2000
-		TCODColor(132,214,255), // -1000
-		TCODColor(247,255,255), // -100
-		TCODColor(49,149,44), 	// 0
-		TCODColor(249,209,151), // 500
-		TCODColor(165,148,24), 	// 1000
-		TCODColor(153,110,6), 	// 2500
-		TCODColor(172,141,138), // 4000
+	];
+	static const float altitudes[MAX_ALT_KEY] = 
+	[
+	    -2000,-1000,-100,0,500,1000,2500,4000	// in meters
+	];
+	static const TCOD_color_t altColors[MAX_ALT_KEY] = 
+	[
+		TCOD_color_t(24,165,255), 	// -2000
+		TCOD_color_t(132,214,255), 	// -1000
+		TCOD_color_t(247,255,255), 	// -100
+		TCOD_color_t(49,149,44), 	// 0
+		TCOD_color_t(249,209,151), 	// 500
+		TCOD_color_t(165,148,24), 	// 1000
+		TCOD_color_t(153,110,6), 	// 2500
+		TCOD_color_t(172,141,138), 	// 4000
 	];
 
 	// precipitation color map
 	enum MAX_PREC_KEY	=	19;
-	static const int precIndexes[MAX_PREC_KEY] = [
+	static const int precIndexes[MAX_PREC_KEY] = 
+	[
 		4,8,12,16,20,24,28,32,36,40,50,60,70,80,100,120,140,160,255
-		];
-	static const float precipitations[MAX_PREC_KEY] = [
+	];
+	static const float precipitations[MAX_PREC_KEY] = 
+	[
 		0,1,2,3,4,5,6,7,8,9,10,13,15,18,20,25,30,35,40  // cm / m² / year
 	];
-	static const TCODColor precColors[MAX_PREC_KEY]= [
-		TCODColor(128,0,0), 	// < 4
-		TCODColor(173,55,0), 	// 4-8
-		TCODColor(227,102,0), 	// 8-12
-		TCODColor(255,149,0), 	// 12-16
-		TCODColor(255,200,0), 	// 16-20
-		TCODColor(255,251,0), 	// 20-24
-		TCODColor(191,255,0), 	// 24-28
-		TCODColor(106,251,0), 	// 28-32
-		TCODColor(25,255,48), 	// 32-36
-		TCODColor(48,255,141), 	// 36-40
-		TCODColor(28,255,232), 	// 40-50
-		TCODColor(54,181,255), 	// 50-60
-		TCODColor(41,71,191), 	// 60-70
-		TCODColor(38,0,255), 	// 70-80
-		TCODColor(140,0,255), 	// 80-100
-		TCODColor(221,0,255), 	// 100-120
-		TCODColor(255,87,255), 	// 120-140
-		TCODColor(255,173,255), // 140-160
-		TCODColor(255,206,255), // > 160
+	static const TCOD_color_t precColors[MAX_PREC_KEY]= 
+	[
+		TCOD_color_t(128,0,0), 		// < 4
+		TCOD_color_t(173,55,0), 	// 4-8
+		TCOD_color_t(227,102,0), 	// 8-12
+		TCOD_color_t(255,149,0), 	// 12-16
+		TCOD_color_t(255,200,0), 	// 16-20
+		TCOD_color_t(255,251,0), 	// 20-24
+		TCOD_color_t(191,255,0), 	// 24-28
+		TCOD_color_t(106,251,0), 	// 28-32
+		TCOD_color_t(25,255,48), 	// 32-36
+		TCOD_color_t(48,255,141), 	// 36-40
+		TCOD_color_t(28,255,232), 	// 40-50
+		TCOD_color_t(54,181,255), 	// 50-60
+		TCOD_color_t(41,71,191), 	// 60-70
+		TCOD_color_t(38,0,255), 	// 70-80
+		TCOD_color_t(140,0,255), 	// 80-100
+		TCOD_color_t(221,0,255), 	// 100-120
+		TCOD_color_t(255,87,255), 	// 120-140
+		TCOD_color_t(255,173,255), 	// 140-160
+		TCOD_color_t(255,206,255), 	// > 160
 	];
 
 	// temperature color map
 	enum MAX_TEMP_KEY	=	7;
 	static const int tempIndexes[MAX_TEMP_KEY] = [0,42,84,126,168,210,255];
 	static const int temperatures[MAX_TEMP_KEY] = [-30,-20,-10,0,10,20,30];
-	static const TCODColor tempKeyColor[MAX_TEMP_KEY]= [
-		TCODColor(180,8,130), 	// -30 °C
-		TCODColor(32,1,139), 	// -20 °C
-		TCODColor(0,65,252),	// -10 °C
-		TCODColor(37,255,236),	// 0 °C
-		TCODColor(255,255,1), 	// 10 °C
-		TCODColor(255,29,4), 	// 20 °C
-		TCODColor(80,3,0), 		// 30 °C
+	static const TCOD_color_t tempKeyColor[MAX_TEMP_KEY] = 
+	[
+		TCOD_color_t(180,8,130), 	// -30 °C
+		TCOD_color_t(32,1,139), 	// -20 °C
+		TCOD_color_t(0,65,252),		// -10 °C
+		TCOD_color_t(37,255,236),	// 0 °C
+		TCOD_color_t(255,255,1), 	// 10 °C
+		TCOD_color_t(255,29,4), 	// 20 °C
+		TCOD_color_t(80,3,0), 		// 30 °C
 	];
-
-	static T clamp(T)(T min, T max, T val) pure nothrow
-	{
-		return val < min ? min : (val > max ? max : val);
-	}
 
 	static bool inRectangle(int x, int y, int w, int h) pure nothrow
 	{
@@ -202,6 +203,25 @@ package
 	{
 		return (((x1)-(x2))*((x1)-(x2))+((y1)-(y2))*((y1)-(y2)));
 	}	
+
+	void genLog(T...)(T args)
+	{
+		writeNoticeLog(text(args));
+	}
+
+}
+private
+{
+	static const int dirx[9] = [ 0, -1,0,1,-1,1,-1,0,1 ];
+	static const int diry[9] = [ 0, -1,-1,-1,0,0,1,1,1 ];
+	static const float dircoef[9] =  [1.0f, 1.0f/1.414f, 1.0f, 1.0f/1.414f,1.0f,1.0f,1.0f/1.414f, 1.0f,1.0f/1.414f ];
+	static const int oppdir[9] = [0, 8, 7, 6, 5, 4, 3, 2, 1 ];
+
+	// erosion parameters
+	enum EROSION_FACTOR  		= 0.01f;
+	enum SEDIMENTATION_FACTOR 	= 0.01f;
+	enum MAX_EROSION_ALT 		= 0.9f;
+	enum MUDSLIDE_COEF 			= 0.4f;
 }
 
 class WorldGenerator 
@@ -209,89 +229,99 @@ class WorldGenerator
 	public
 	{
 		// altitude->color map
-		TCODColor mapGradient[256];
+		TCOD_color_t mapGradient[256];
 		// world height map (0.0 - 1.0)
-		TCODHeightMap *hm;
+		TCOD_heightmap_t *hm;
 		// height map without erosion
-		TCODHeightMap *hm2;
+		TCOD_heightmap_t *hm2;
 		// complete world map (not shaded)
-		TCODImage *worldmap;
+		TCOD_image_t worldmap;
 		// temperature map (in °C)
-		TCODHeightMap *temperature;
+		TCOD_heightmap_t *temperature;
 		// precipitation map (0.0 - 1.0)
-		TCODHeightMap *precipitation;
+		TCOD_heightmap_t *precipitation;
 		// biome map
-		EBiome *biomeMap;
+		EBiome[] biomeMap;
 
-		void generate(TCODRandom *wRng)
+		void generate(TCOD_random_t* pwRng)
 		{
-			float t00, t0=TCODSystem.getElapsedSeconds();
+			float t00, t0 = TCOD_sys_elapsed_seconds();
 			t00=t0;
-		    cloudDx=cloudTotalDx=0.0f;
-			TCODColor.genMap(mapGradient,MAX_COLOR_KEY,keyColor,keyIndex);
-			if ( wRng == NULL ) wRng=TCODRandom.getInstance();
+		    cloudDx = cloudTotalDx = 0.0f;
+			TCOD_color_gen_map(mapGradient.ptr, MAX_COLOR_KEY, keyColor.ptr, keyIndex.ptr);
+			
+			TCOD_random_t wRng;
+			if ( pwRng is null ) 
+			{
+				wRng = TCOD_random_get_instance();
+			} else
+			{
+				wRng = *pwRng;
+			}
 			wgRng = wRng;
-			noise=new TCODNoise(2,wgRng);
-			hm=new TCODHeightMap(HM_WIDTH,HM_HEIGHT);
-			hm2=new TCODHeightMap(HM_WIDTH,HM_HEIGHT);
-			worldmap = new TCODImage(HM_WIDTH,HM_HEIGHT);
+
+			noise = TCOD_noise_new(2, 0.5f, 2.0f, wgRng);
+			hm  = TCOD_heightmap_new(HM_WIDTH,HM_HEIGHT);
+			hm2 = TCOD_heightmap_new(HM_WIDTH,HM_HEIGHT);
+			worldmap = TCOD_image_new(HM_WIDTH,HM_HEIGHT);
 			worldint = new float[HM_WIDTH*HM_HEIGHT];
-			temperature =  new TCODHeightMap(HM_WIDTH,HM_HEIGHT);
-			precipitation = new TCODHeightMap(HM_WIDTH,HM_HEIGHT);
+			temperature =   TCOD_heightmap_new(HM_WIDTH,HM_HEIGHT);
+			precipitation = TCOD_heightmap_new(HM_WIDTH,HM_HEIGHT);
 			biomeMap = new EBiome[HM_WIDTH*HM_HEIGHT];
 			mapData = new map_data_t[HM_WIDTH*HM_HEIGHT];
-			memset(mapData,0,sizeof(map_data_t)*HM_WIDTH*HM_HEIGHT);
-			float t1=TCODSystem.getElapsedSeconds();
-			DBG(("Initialization... %g\n", t1-t0 ));
+			//memset(mapData,0,sizeof(map_data_t)*HM_WIDTH*HM_HEIGHT);
+			
+			float t1 = TCOD_sys_elapsed_seconds();
+			genLog("Initialization... ", t1-t0 );
 			t0=t1;
 
 			buildBaseMap();
-			t1=TCODSystem.getElapsedSeconds();
-			DBG(("Heightmap construction... %g\n", t1-t0 ));
+			t1 = TCOD_sys_elapsed_seconds();
+			genLog("Heightmap construction... ", t1-t0 );
 			t0=t1;
 
 			computePrecipitations();
-			t1=TCODSystem.getElapsedSeconds();
-			DBG(("Precipitation map... %g\n", t1-t0 ));
+			t1 = TCOD_sys_elapsed_seconds();
+			genLog("Precipitation map... ", t1-t0 );
 			t0=t1;
 
 			erodeMap();
-			t1=TCODSystem.getElapsedSeconds();
-			DBG(("Erosion... %g\n", t1-t0 ));
+			t1 = TCOD_sys_elapsed_seconds();
+			genLog("Erosion... ", t1-t0 );
 			t0=t1;
 
 			smoothMap();
-			t1=TCODSystem.getElapsedSeconds();
-			DBG(("Smooth... %g\n", t1-t0 ));
+			t1 = TCOD_sys_elapsed_seconds();
+			genLog("Smooth... ", t1-t0 );
 			t0=t1;
 
 		    setLandMass(0.6f,sandHeight);
 
-			for (int i=0; i < HM_WIDTH*HM_HEIGHT/3000; i++) {
-		//	for (int i=0; i < 1; i++) {
+			for (int i=0; i < HM_WIDTH*HM_HEIGHT/3000; i++) 
+			{
 				generateRivers();
 			}
-			t1=TCODSystem.getElapsedSeconds();
-			DBG(("Rivers... %g\n", t1-t0 ));
+			t1 = TCOD_sys_elapsed_seconds();
+			genLog("Rivers... ", t1-t0 );
 			t0=t1;
 
 		    smoothPrecipitations();
-			t1=TCODSystem.getElapsedSeconds();
-			DBG(("Smooth precipitations... %g\n", t1-t0 ));
+			t1 = TCOD_sys_elapsed_seconds();
+			genLog("Smooth precipitations... ", t1-t0 );
 			t0=t1;
 
 			computeTemperaturesAndBiomes();
-			t1=TCODSystem.getElapsedSeconds();
-			DBG(("Temperature map... %g\n", t1-t0 ));
+			t1 = TCOD_sys_elapsed_seconds();
+			genLog("Temperature map... ", t1-t0 );
 			t0=t1;
 
 			computeColors();
-			t1=TCODSystem.getElapsedSeconds();
-			DBG(("Color map... %g\n", t1-t0 ));
+			t1 = TCOD_sys_elapsed_seconds();
+			genLog("Color map... ", t1-t0 );
 			t0=t1;
 
-			t1=TCODSystem.getElapsedSeconds();
-			DBG(("TOTAL TIME... %g\n", t1-t00 ));			
+			t1 = TCOD_sys_elapsed_seconds();
+			genLog("TOTAL TIME... ", t1-t00 );			
 		}
 
 		int width() @property const
@@ -306,12 +336,12 @@ class WorldGenerator
 
 		float getAltitude(int x, int y) const
 		{
-			return hm.getValue(x,y);
+			return hm.TCOD_heightmap_get_value(x,y);
 		}
 
 		float getInterpolatedAltitude(float x, float y) const
 		{
-			return hm.getInterpolatedValue(x, y);
+			return hm.TCOD_heightmap_get_interpolated_value(x, y);
 		}
 
 		float getSandHeight() const
@@ -327,10 +357,10 @@ class WorldGenerator
 		float getCloudThickness(float x, float y) const
 		{
 		    x += cloudDx;
-		    int ix=cast(int)x;
-		    int iy=cast(int)y;
+		    int ix = cast(int)x;
+		    int iy = cast(int)y;
 		    int ix1 = cast(int)fmin(HM_WIDTH-1,ix+1);
-		    int iy1 = cast(int)fmax(HM_HEIGHT-1,iy+1);
+		    int iy1 = cast(int)fmin(HM_HEIGHT-1,iy+1);
 		    float fdx = x - ix;
 		    float fdy = y - iy;
 		    float v1 = clouds[ix][iy];
@@ -345,17 +375,17 @@ class WorldGenerator
 
 		void getInterpolatedNormal(float x, float y, float n[3]) const
 		{
-			return hm2.getNormal(x,y,n,sandHeight);
+			hm2.TCOD_heightmap_get_normal(x, y, n.ptr, sandHeight);
 		}
 
-		TCODColor getInterpolatedColor(float worldX, float worldY)
+		TCOD_color_t getInterpolatedColor(float worldX, float worldY)
 		{
 			return getInterpolatedColor(worldmap, worldX, worldY);
 		}
 
 		float getInterpolatedIntensity(float worldX, float worldY)
 		{
-			return getInterpolatedFloat(worldint,worldX,worldY,HM_WIDTH,HM_HEIGHT);
+			return getInterpolatedFloat(worldint, worldX, worldY, HM_WIDTH, HM_HEIGHT);
 		}
 
 		// update
@@ -381,7 +411,7 @@ class WorldGenerator
 		            for (int y = 0; y < HM_HEIGHT; y++) {
 		                f[0] = 6.0f*(cast(float)(x+cdx) / HM_WIDTH);
 		                f[1] = 6.0f*(cast(float)(y) / HM_HEIGHT);
-		                clouds[x][y] = 0.5f * (1.0f + 0.8f * noise.getFbmSimplex(f,4.0f));
+		                clouds[x][y] = 0.5f * (1.0f + 0.8f * noise.TCOD_noise_get_fbm(f,4.0f));
 		            }
 		        }
 		    }
@@ -407,26 +437,30 @@ class WorldGenerator
 			{
 				if(altIndexes[idx+1] > ih) break;
 			}
+
+			size_t idx = MAX_ALT_KEY-2;
 			float alt = altitudes[idx] + (altitudes[idx+1]-altitudes[idx]) 
 				* (ih - altIndexes[idx]) / (altIndexes[idx+1]-altIndexes[idx]);
+			return alt;
 		}
 
 		float getPrecipitations(float x, float y) const // in centimeter/m²/year
 		{
-			int iprec = cast(int)(256*precipitation.getValue(cast(int)x,cast(int)y));
+			int iprec = cast(int)(256*precipitation.TCOD_heightmap_get_value(cast(int)x,cast(int)y));
 			iprec=clamp(0,255,iprec);
 			foreach(size_t idx; 0..MAX_PREC_KEY-1)
 			{
 				if ( precIndexes[idx+1] > iprec ) break;
 			}
 
+			size_t idx = MAX_PREC_KEY-2;
 			float prec = precipitations[idx] + (precipitations[idx+1]-precipitations[idx]) * (iprec-precIndexes[idx])/(precIndexes[idx+1]-precIndexes[idx]);
 			return prec;			
 		}
 
 		float getTemperature(float x, float y) const // in °C
 		{
-			return temperature.getValue(cast(int)x,cast(int)y);
+			return temperature.TCOD_heightmap_get_value(cast(int)x,cast(int)y);
 		}
 
 		EBiome getBiome(float x, float y) const
@@ -437,53 +471,50 @@ class WorldGenerator
 		// map generators
 		void saveBiomeMap(string filename = "")
 		{
-		    static TCODImage *legend = null;
+		    static TCOD_image_t legend;
 		    static int legendHeight, legendWidth;
-		    static const TCODColor biomeColors[] = [
+		    static const TCOD_color_t biomeColors[] = [
 			    // TUNDRA,
-			    TCODColor(88,234,250),
+			    TCOD_color_t(88,234,250),
 			    // COLD_DESERT,
-			    TCODColor(129,174,170),
+			    TCOD_color_t(129,174,170),
 			    // GRASSLAND,
-			    TCODColor.sea,
+			    TCOD_color_t(0, 255, 127),
 			    // BOREAL_FOREST,
-			    TCODColor(14,93,43),
+			    TCOD_color_t(14,93,43),
 			    // TEMPERATE_FOREST,
-			    TCODColor(44,177,83),
+			    TCOD_color_t(44,177,83),
 			    // TROPICAL_MONTANE_FOREST,
-			    TCODColor(185,232,164),
+			    TCOD_color_t(185,232,164),
 			    // HOT_DESERT,
-			    TCODColor(229,247,184),
+			    TCOD_color_t(229,247,184),
 			    // SAVANNA,
-			    TCODColor.orange,
+			    TCOD_color_t(255, 127, 0),
 			    // TROPICAL_DRY_FOREST,
-			    TCODColor.darkYellow,
+			    TCOD_color_t(255, 255, 0),
 			    // TROPICAL_EVERGREEN_FOREST,
-			    TCODColor.green,
+			    TCOD_color_t(0, 255, 0),
 			    // THORN_FOREST,
-			    TCODColor(192,192,112),
+			    TCOD_color_t(192,192,112),
 		    ];
 
-		    if ( legend is null ) 
-		    {
-		        legend = new TCODImage("data/img/legend_biome.png");
-		        legend.getSize(&legendWidth,&legendHeight);
-		    }
+		    legend = TCOD_image_load("data/img/legend_biome.png");
+		    legend.TCOD_image_get_size(&legendWidth,&legendHeight);
 
 		    if ( filename == "" ) filename="world_biome.png";
 
-		    TCODImage img = TCODImage(cast(int)fmax(HM_WIDTH,legendWidth),HM_HEIGHT+legendHeight);
+		    TCOD_image_t img = TCOD_image_new(cast(int)fmax(HM_WIDTH,legendWidth),HM_HEIGHT+legendHeight);
 		    // draw biome map
 			for (size_t x=0; x < HM_WIDTH; x++) 
 			{
 				for (size_t y=0; y < HM_HEIGHT; y++) 
 				{
-				    float h = hm.getValue(x,y);
-				    if ( h < sandHeight ) img.putPixel(x,y,TCODColor(100,100,255));
-				    else img.putPixel(x, y, biomeColors[biomeMap[x+y*HM_WIDTH]]);
+				    float h = hm.TCOD_heightmap_get_value(x,y);
+				    if ( h < sandHeight ) TCOD_image_put_pixel(img, x,y,TCOD_color_t(100,100,255));
+				    else TCOD_image_put_pixel(img, x, y, biomeColors[biomeMap[x+y*HM_WIDTH]]);
 				}
 			}
-			drawCoasts(&img);
+			drawCoasts(img);
 
 			// blit legend
 			int legendx = cast(int)fmax(HM_WIDTH,legendWidth) / 2 - legendWidth/2;
@@ -491,7 +522,7 @@ class WorldGenerator
 			{
 				for (size_t y=0; y < legendHeight; y++) 
 				{
-				    img.putPixel(legendx+x, HM_HEIGHT+y, legend.getPixel(x,y));
+				    TCOD_image_put_pixel(img, legendx+x, HM_HEIGHT+y, legend.TCOD_image_get_pixel(x,y));
 				}
 			}
 
@@ -500,158 +531,151 @@ class WorldGenerator
 			{
 		        for (int x=17; x < 47; x++)
 		            for (int y=4+i*14; y < 14+i*14; y++ )
-		                img.putPixel(legendx+x,HM_HEIGHT+y,biomeColors[i]);
+		                TCOD_image_put_pixel(img, legendx+x,HM_HEIGHT+y,biomeColors[i]);
 			}
-			for (size_t i=6; i < NB_BIOMES; i++ ) 
+			for (size_t i=6; i < EBiome.NB_BIOMES; i++ ) 
 			{
 		        for (int x=221; x < 251; x++)
 		            for (int y=4+(i-6)*14; y < 14+(i-6)*14; y++ )
-		                img.putPixel(legendx+x,HM_HEIGHT+y,biomeColors[i]);
+		                TCOD_image_put_pixel(img, legendx+x,HM_HEIGHT+y,biomeColors[i]);
 			}
-			img.save(filename);
+			img.TCOD_image_save(toStringz(filename));
 		}
 
 		void saveAltitudeMap(string filename = "")
 		{
-		    static TCODColor altGradient[256];
+		    static TCOD_color_t altGradient[256];
 
-		    static TCODImage *legend = null;
+		    static TCOD_image_t legend;
 		    static int legendHeight,legendWidth;
 
-		    if ( legend is null ) 
-		    {
-		        legend = new TCODImage("data/img/legend_altitude.png");
-		        legend.getSize(&legendWidth,&legendHeight);
-		        TCODColor.genMap(altGradient,MAX_ALT_KEY,altColors,altIndexes);
-		    }
+		    legend = TCOD_image_load("data/img/legend_altitude.png");
+		    legend.TCOD_image_get_size(&legendWidth,&legendHeight);
+		    TCOD_color_gen_map(altGradient.ptr, MAX_ALT_KEY, altColors.ptr, altIndexes.ptr);
 
 		    if ( filename == "" ) filename="world_altitude.png";
 
-		    TCODImage img = TCODImage(HM_WIDTH+legendWidth,cast(int)fmax(HM_HEIGHT,legendHeight));
+		    TCOD_image_t img = TCOD_image_new(HM_WIDTH+legendWidth,cast(int)fmax(HM_HEIGHT,legendHeight));
 		    
 		    // render altitude map
 		    for (int x=0; x < HM_WIDTH; x++) 
 		    {
 		        for (int y=0; y < HM_HEIGHT; y++) 
 		        {
-		            float h=hm.getValue(x,y);
+		            float h = hm.TCOD_heightmap_get_value(x,y);
 		            size_t ialt = cast(size_t)(h * 256);
-		            ialt = clamp(0,255,ialt);
-		            img.putPixel(x,y,altGradient[ialt]);
+		            ialt = clamp(0,255,cast(int)ialt);
+		            TCOD_image_put_pixel(img, x,y,altGradient[ialt]);
 		        }
 		    }
 
 			// blit legend
-			int legendy = MAX(HM_HEIGHT,legendHeight) / 2 - legendHeight/2;
+			int legendy = cast(int)fmax(HM_HEIGHT,legendHeight) / 2 - legendHeight/2;
 			for (int x=0; x < legendWidth; x++) 
 			{
 				for (int y=0; y < legendHeight; y++) 
 				{
-				    img.putPixel(HM_WIDTH+x,legendy+y,legend.getPixel(x,y));
+				    TCOD_image_put_pixel(img, HM_WIDTH+x,legendy+y,legend.TCOD_image_get_pixel(x,y));
 				}
 			}
-		    img.save(filename);
+		    img.TCOD_image_save(toStringz(filename));
 		}
 
 		void saveTemperatureMap(string filename = "")
 		{
-		    static TCODColor tempGradient[256];
+		    static TCOD_color_t tempGradient[256];
 
-		    static TCODImage *legend = null;
+		    static TCOD_image_t legend;
 		    static int legendHeight,legendWidth;
-		    if ( legend == null ) 
-		    {
-		        legend = new TCODImage("data/img/legend_temperature.png");
-		        legend.getSize(&legendWidth,&legendHeight);
-		        TCODColor.genMap(tempGradient, MAX_TEMP_KEY, tempKeyColor, tempIndexes);
-		    }
+		    
+	        legend = TCOD_image_load("data/img/legend_temperature.png");
+	        legend.TCOD_image_get_size(&legendWidth,&legendHeight);
+	        TCOD_color_gen_map(tempGradient.ptr, MAX_TEMP_KEY, tempKeyColor.ptr, tempIndexes.ptr);
+		    
 
 		    if ( filename == "" ) filename="world_temperature.png";
 
-		    TCODImage img = TCODImage(MAX(HM_WIDTH,legendWidth), HM_HEIGHT+legendHeight);
+		    TCOD_image_t img = TCOD_image_new(cast(int)fmax(HM_WIDTH,legendWidth), HM_HEIGHT+legendHeight);
 
 		    float minTemp,maxTemp;
-		    temperature.getMinMax(&minTemp,&maxTemp);
+		    temperature.TCOD_heightmap_get_minmax(&minTemp,&maxTemp);
 
 		    // render temperature map
 		    for (int x=0; x < HM_WIDTH; x++) 
 		    {
 		        for (int y=0; y < HM_HEIGHT; y++) 
 		        {
-				    float h = hm.getValue(x,y);
-				    if ( h < sandHeight ) img.putPixel(x, y, TCODColor(100,100,255));
+				    float h = hm.TCOD_heightmap_get_value(x,y);
+				    if ( h < sandHeight ) TCOD_image_put_pixel(img, x, y, TCOD_color_t(100,100,255));
 				    else 
 				    {
-			            float temp=temperature.getValue(x,y);
+			            float temp = temperature.TCOD_heightmap_get_value(x,y);
 			            temp = (temp - minTemp) / (maxTemp-minTemp);
 			            int colorIdx = cast(int)(temp*255);
 			            colorIdx = clamp(0,255,colorIdx);
-			            img.putPixel(x,y,tempGradient[colorIdx]);
+			            TCOD_image_put_pixel(img, x,y,tempGradient[colorIdx]);
 			        }
 		        }
 		    }
-		    drawCoasts(&img);
+		    drawCoasts(img);
 
 			// blit legend
-			int legendx = MAX(HM_WIDTH,legendWidth) / 2 - legendWidth/2;
+			int legendx = cast(int)fmax(HM_WIDTH, legendWidth) / 2 - legendWidth/2;
 			for (int x=0; x < legendWidth; x++) {
 				for (int y=0; y < legendHeight; y++) {
-				    img.putPixel(legendx+x,HM_HEIGHT+y,legend.getPixel(x,y));
+				    TCOD_image_put_pixel(img, legendx+x,HM_HEIGHT+y,legend.TCOD_image_get_pixel(x,y));
 				}
 			}
-		    img.save(filename);
+		    img.TCOD_image_save(toStringz(filename));
 		}
 
 		void savePrecipitationMap(string filename = "")
 		{
-		    static TCODImage *legend = null;
+		    static TCOD_image_t legend;
 		    static int legendHeight,legendWidth;
-		    if ( legend is null ) 
-		    {
-		        legend = new TCODImage("data/img/legend_precipitation.png");
-		        legend.getSize(&legendWidth,&legendHeight);
-		    }
+
+	        legend = TCOD_image_load("data/img/legend_precipitation.png");
+	        legend.TCOD_image_get_size(&legendWidth,&legendHeight);
 
 		    if ( filename == "" ) filename="world_precipitation.png";
 
-		    TCODImage img = TCODImage(MAX(HM_WIDTH,legendWidth),HM_HEIGHT+legendHeight);
+		    TCOD_image_t img = TCOD_image_new(cast(int)fmax(HM_WIDTH,legendWidth),HM_HEIGHT+legendHeight);
 
 		    // render precipitation map
 		    for (int x=0; x < HM_WIDTH; x++) 
 		    {
 		        for (int y=0; y < HM_HEIGHT; y++) 
 		        {
-				    float h = hm.getValue(x,y);
-				    if ( h < sandHeight ) img.putPixel(x, y, TCODColor(100,100,255));
+				    float h = hm.TCOD_heightmap_get_value(x,y);
+				    if ( h < sandHeight ) TCOD_image_put_pixel(img, x, y, TCOD_color_t(100,100,255));
 				    else 
 				    {
-			            float prec=precipitation.getValue(x,y);
+			            float prec = precipitation.TCOD_heightmap_get_value(x,y);
 			            int iprec = cast(int)(prec * 180);
 			            int colorIdx=0;
 			            while (colorIdx < MAX_PREC_KEY && iprec > precIndexes[colorIdx]) colorIdx++;
 			            colorIdx = clamp(0,MAX_PREC_KEY,colorIdx);
-			            img.putPixel(x,y,precColors[colorIdx]);
+			            TCOD_image_put_pixel(img, x,y,precColors[colorIdx]);
 			        }
 		        }
 		    }
-		    drawCoasts(&img);
+		    drawCoasts(img);
 
 			// blit legend
-			int legendx = cast(int)fmax(HM_WIDTH,legendWidth) / 2 - legendWidth/2;
+			int legendx = cast(int)fmax(HM_WIDTH, legendWidth) / 2 - legendWidth/2;
 			for (int x=0; x < legendWidth; x++) 
 			{
 				for (int y=0; y < legendHeight; y++) 
 				{
-				    img.putPixel(legendx+x, HM_HEIGHT+y, legend.getPixel(x,y));
+				    TCOD_image_put_pixel(img, legendx+x, HM_HEIGHT+y, legend.TCOD_image_get_pixel(x,y));
 				}
 			}
-		    img.save(filename);
-		}
-
+		    img.TCOD_image_save(toStringz(filename));
+		}		
 	}
 	protected
 	{
-		class RiverPathCbk : ITCODPathCallback 
+		/*class RiverPathCbk : ITCODPathCallback 
 		{
 		    float getWalkCost( int xFrom, int yFrom, int xTo, int yTo, void *userData ) const 
 		    {
@@ -663,15 +687,15 @@ class WorldGenerator
 				// return (1.0f+h2-h1)*10+5*(1.0f+noise2d.getSimplex(f));
 		        return (0.01f+h2-h1)*100;
 		    }
-		};
+		};*/
 
-		TCODNoise *noise;
+		TCOD_noise_t noise;
 		// cloud thickness
 		float clouds[HM_WIDTH][HM_HEIGHT];
 		float cloudDx; // horizontal offset for smooth scrolling
 		float cloudTotalDx;
 		// world light intensity map (shadow map)
-		float *worldint;
+		float[] worldint;
 
 		struct map_data_t
 		{
@@ -686,15 +710,15 @@ class WorldGenerator
 			ubyte riverId;
 			int riverLength;
 		}
-		map_data_t * mapData;
+		map_data_t[] mapData;
 
 		struct river_t
 		{
-		    TCODList!int coords;
-		    TCODList!int strength;
+		    SList!int coords;
+		    Array!int strength;
 		}
-		TCODList!(river_t *) rivers;
-		TCODRandom *wgRng;		
+		SList!river_t rivers;
+		TCOD_random_t wgRng;
 	}
 	protected
 	{
@@ -704,29 +728,29 @@ class WorldGenerator
 			{
 				float hillMinRadius = baseRadius*(1.0f-radiusVar);
 				float hillMaxRadius = baseRadius*(1.0f+radiusVar);
-				float radius = wgRng.getFloat(hillMinRadius, hillMaxRadius);
-				int xh = wgRng.getInt(0,HM_WIDTH-1);
-				int yh = wgRng.getInt(0,HM_HEIGHT-1);
-				hm.addHill(cast(float)xh,cast(float)yh,radius,height);
+				float radius = wgRng.TCOD_random_get_float(hillMinRadius, hillMaxRadius);
+				int xh = wgRng.TCOD_random_get_int(0,HM_WIDTH-1);
+				int yh = wgRng.TCOD_random_get_int(0,HM_HEIGHT-1);
+				hm.TCOD_heightmap_add_hill(cast(float)xh,cast(float)yh,radius,height);
 			}
 		}
 
 		void buildBaseMap()
 		{
-			float t0 = TCODSystem.getElapsedSeconds();
+			float t0 = TCOD_sys_elapsed_seconds();
 			addHill(600,16.0*HM_WIDTH/200,0.7,0.3);
-			hm.normalize();
-			float t1 = TCODSystem.getElapsedSeconds();
+			hm.TCOD_heightmap_normalize(0.0f, 1.0f);
+			float t1 = TCOD_sys_elapsed_seconds();
 
-			DBG(("  Hills... %g\n", t1-t0 ));
+			genLog("  Hills... ", t1-t0 );
 			t0=t1;
 
-			hm.addFbm(noise,2.20*HM_WIDTH/400,2.20*HM_WIDTH/400,0,0,10.0f,1.0,2.05);
-			hm.normalize();
-			hm2.copy(hm);
-			t1 = TCODSystem.getElapsedSeconds();
+			hm.TCOD_heightmap_add_fbm(noise,2.20*HM_WIDTH/400,2.20*HM_WIDTH/400,0,0,10.0f,1.0,2.05);
+			hm.TCOD_heightmap_normalize(0.0f, 1.0f);
+			TCOD_heightmap_copy(hm, hm2);
+			t1 = TCOD_sys_elapsed_seconds();
 
-			DBG(("  Fbm... %g\n", t1-t0 ));
+			genLog("  Fbm... ", t1-t0 );
 			t0=t1;
 
 		    setLandMass(0.6f,sandHeight);
@@ -736,18 +760,18 @@ class WorldGenerator
 			{
 			    for (int y=0; y < HM_HEIGHT; y++) 
 			    {
-					float h = hm.getValue(x,y);
+					float h = hm.TCOD_heightmap_get_value(x,y);
 					if ( h >= sandHeight ) 
 					{
 		                float coef = (h-sandHeight) / (1.0f - sandHeight);
 					    h = sandHeight + coef * coef * coef * (1.0f - sandHeight);
-					    hm.setValue(x,y,h);
+					    hm.TCOD_heightmap_set_value(x,y,h);
 					}
 			    }
 			}
 
-			t1=TCODSystem.getElapsedSeconds();
-			DBG(("  Flatten plains... %g\n", t1-t0 ));
+			t1 = TCOD_sys_elapsed_seconds();
+			genLog("  Flatten plains... ", t1-t0 );
 			t0=t1;
 
 			// we use a custom erosion algo
@@ -764,48 +788,49 @@ class WorldGenerator
 			    for (int y=0; y < HM_HEIGHT; y++) 
 			    {
 		            f[1] = 6.0f*(cast(float)(y) / HM_HEIGHT);
-		            clouds[x][y] = 0.5f * (1.0f + 0.8f * noise.getFbmSimplex(f,4.0f));
+		            TCOD_noise_set_type(noise, TCOD_NOISE_SIMPLEX);
+		            clouds[x][y] = 0.5f * (1.0f + 0.8f * noise.TCOD_noise_get_fbm(f.ptr, 4.0f));
 			    }
 			}
-			t1 = TCODSystem.getElapsedSeconds();
-			DBG(("  Init clouds... %g\n", t1-t0 ));
+			t1 = TCOD_sys_elapsed_seconds();
+			genLog("  Init clouds... ", t1-t0 );
 			t0 = t1;
-		}
+		}		
 
 		void erodeMap()
 		{
-			TCODHeightMap newMap = TCODHeightMap(HM_WIDTH,HM_HEIGHT);
+			TCOD_heightmap_t* newMap = TCOD_heightmap_new(HM_WIDTH,HM_HEIGHT);
 			for (int i=5; i != 0; i --) 
 			{
 				// compute flow and slope maps
-				map_data_t *md = mapData;
+				map_data_t* md = &mapData[0];
 				for (int y=0; y < HM_HEIGHT; y++) 
 				{
 		            for (int x=0; x < HM_WIDTH; x++) 
 		            {
-						float h = hm.getValue(x,y);
+						float h = hm.TCOD_heightmap_get_value(x,y);
 						float hmin = h, hmax = h;
 						int minDir = 0, maxDir = 0;
-						for (int i=1; i< 9; i++ ) 
+						for (int ii=1; ii< 9; ii++ ) 
 						{
-							int ix = x+dirx[i];
-							int iy = y+diry[i];
-							if ( IN_RECTANGLE(ix,iy,HM_WIDTH,HM_HEIGHT)) 
+							int ix = x+dirx[ii];
+							int iy = y+diry[ii];
+							if ( inRectangle(ix,iy,HM_WIDTH,HM_HEIGHT)) 
 							{
-								float h2 = hm.getValue(ix,iy);
+								float h2 = hm.TCOD_heightmap_get_value(ix,iy);
 								if ( h2 < hmin ) 
 								{
 									hmin = h2;
-									minDir = i;
+									minDir = ii;
 								} else if ( h2 > hmax ) 
 								{
 									hmax = h2;
-									maxDir = i;
+									maxDir = ii;
 								}
 							}
 						}
-						md.flowDir = minDir;
-						md.upDir = maxDir;
+						md.flowDir = cast(ubyte)minDir;
+						md.upDir = cast(ubyte)maxDir;
 						float slope = hmin - h; // this is negative
 						slope *= dircoef[minDir];
 						md.slope = slope;
@@ -813,7 +838,7 @@ class WorldGenerator
 					}
 				}
 
-				md=mapData;
+				md = &mapData[0];
 				for (int y=0; y < HM_HEIGHT; y++) 
 				{
 		            for (int x=0; x < HM_WIDTH; x++) 
@@ -825,20 +850,20 @@ class WorldGenerator
 		                map_data_t *md2 = md;
 		                while ( !end ) 
 		                {
-		                    float h = hm.getValue(ix,iy);
+		                    float h = hm.TCOD_heightmap_get_value(ix,iy);
 		                    if (h < sandHeight-0.01f) break;
 		                    if ( md2.flowDir == oppdir[oldFlow] ) 
 		                    {
 		                        h += SEDIMENTATION_FACTOR * sediment;
-		                        hm.setValue(ix,iy,h);
+		                        hm.TCOD_heightmap_set_value(ix,iy,h);
 		                        end = true;
 		                    } else 
 		                    {
 		                        // remember, slope is negative
-		                        h += precipitation.getValue(ix,iy)* EROSION_FACTOR * md2.slope;
+		                        h += precipitation.TCOD_heightmap_get_value(ix,iy)* EROSION_FACTOR * md2.slope;
 		                        h = cast(float)fmax(h,sandHeight);
 		                        sediment -= md2.slope;
-		                        hm.setValue(ix,iy,h);
+		                        hm.TCOD_heightmap_set_value(ix,iy,h);
 		                        oldFlow = md2.flowDir;
 		                        ix += dirx[oldFlow];
 		                        iy += diry[oldFlow];
@@ -848,7 +873,7 @@ class WorldGenerator
 		                md++;
 					}
 		        }
-				DBG( ("  Erosion pass %d\n",i));
+				genLog("  Erosion pass ",i);
 
 				// mudslides (smoothing)
 				float sandCoef = 1.0f/(1.0f-sandHeight);
@@ -856,23 +881,23 @@ class WorldGenerator
 				{
 					for (int y=0; y < HM_HEIGHT; y++) 
 					{
-						float h = hm.getValue(x,y);
+						float h = hm.TCOD_heightmap_get_value(x,y);
 						if ( h < sandHeight-0.01f || h >= MAX_EROSION_ALT ) 
 						{
-							newMap.setValue(x,y,h);
+							newMap.TCOD_heightmap_set_value(x,y,h);
 							continue;
 						}
 						float sumDelta1 = 0.0f, sumDelta2 = 0.0f;
 						int nb1 = 1, nb2 = 1;
-						for (int i=1; i < 9; i++ ) 
+						for (int ii=1; ii < 9; ii++ ) 
 						{
-							int ix = x+dirx[i];
-							int iy = y+diry[i];
+							int ix = x+dirx[ii];
+							int iy = y+diry[ii];
 							if ( inRectangle(ix, iy, HM_WIDTH,HM_HEIGHT)) 
 							{
-								float ih = hm.getValue(ix,iy);
+								float ih = hm.TCOD_heightmap_get_value(ix,iy);
 								if ( ih < h ) {
-									if ( i ==1 || i == 3 || i == 6 || i == 8 ) {
+									if ( ii ==1 || ii == 3 || ii == 6 || ii == 8 ) {
 										// diagonal neighbour
 										sumDelta1 += (ih - h)*0.4f;
 										nb1++;
@@ -890,12 +915,12 @@ class WorldGenerator
 						float hcoef=(h-sandHeight)* sandCoef;
 						dh *= (1.0f-hcoef*hcoef*hcoef); // less smoothing at high altitudes
 
-						newMap.setValue(x,y,h+dh);
+						newMap.TCOD_heightmap_set_value(x,y,h+dh);
 					}
 				}
-				hm.copy(&newMap);
+				TCOD_heightmap_copy(newMap, hm);
 			}
-		}
+		}	
 
 		void smoothMap()
 		{
@@ -907,22 +932,22 @@ class WorldGenerator
 
 			debug
 			{
-				float t0 = TCODSystem.getElapsedSeconds();
+				float t0 = TCOD_sys_elapsed_seconds();
 			}
 
-			hm.kernelTransform(smoothKernelSize,smoothKernelDx,smoothKernelDy,smoothKernelWeight,-1000,1000);
-			hm2.kernelTransform(smoothKernelSize,smoothKernelDx,smoothKernelDy,smoothKernelWeight,-1000,1000);
-			hm.normalize();
+			hm.TCOD_heightmap_kernel_transform(smoothKernelSize, smoothKernelDx.ptr, smoothKernelDy.ptr, smoothKernelWeight,-1000,1000);
+			hm2.TCOD_heightmap_kernel_transform(smoothKernelSize, smoothKernelDx.ptr, smoothKernelDy.ptr, smoothKernelWeight,-1000,1000);
+			hm.TCOD_heightmap_normalize(0.0f, 1.0f);
 
 			debug
 			{
-				float t1 = TCODSystem.getElapsedSeconds();
-				DBG(("  Blur... %g\n", t1-t0 ));
+				float t1 = TCOD_sys_elapsed_seconds();
+				genLog("  Blur... ", t1-t0 );
 			}
 		}
 
 		// compute the ground color from the heightmap
-		TCODColor getMapColor(float h)
+		TCOD_color_t getMapColor(float h)
 		{
 			int colorIdx;
 			if ( h < sandHeight ) colorIdx = cast(int)(h/sandHeight * COLOR_KEY_MAX_SEA);
@@ -935,10 +960,10 @@ class WorldGenerator
 		float getMapIntensity(float worldX,float worldY, float lightDir[3])
 		{
 		    // sun color & direction
-		    static const TCODColor sunCol = TCODColor(255,255,160);
+		    static const TCOD_color_t sunCol = TCOD_color_t(255,255,160);
 			float normal[3];
-		    float wx = clamp(0.0f, HM_WIDTH-1,worldX);
-		    float wy = clamp(0.0f, HM_HEIGHT-1,worldY);
+		    float wx = clamp(0.0f, cast(float)HM_WIDTH-1, worldX);
+		    float wy = clamp(0.0f, cast(float)HM_HEIGHT-1, worldY);
 
 			// apply sun light
 		    getInterpolatedNormal(wx,wy,normal);
@@ -949,31 +974,31 @@ class WorldGenerator
 			return intensity;			
 		}
 		
-		TCODColor getInterpolatedColor(TCODImage *img, float x, float y) 
+		TCOD_color_t getInterpolatedColor(TCOD_image_t img, float x, float y) 
 		{
 			int w,h;
-			img.getSize(&w,&h);
-			float wx = clamp(0.0f, w-1,x);
-			float wy = clamp(0.0f, h-1,y);
+			img.TCOD_image_get_size(&w,&h);
+			float wx = clamp(0.0f, cast(float)w-1,x);
+			float wy = clamp(0.0f, cast(float)h-1,y);
 			int iwx = cast(int)wx;
 			int iwy = cast(int)wy;
 			float dx = wx - iwx;
 			float dy = wy - iwy;
 
-			TCODColor colNW = img.getPixel(iwx,iwy);
-			TCODColor colNE = (iwx < w-1 ? img.getPixel(iwx+1,iwy) : colNW);
-			TCODColor colSW = (iwy < h-1 ? img.getPixel(iwx,iwy+1) : colNW);
-			TCODColor colSE = (iwx < w-1 && iwy < h-1 ? img.getPixel(iwx+1,iwy+1) : colNW);
-			TCODColor colN = TCODColor.lerp(colNW,colNE,dx);
-			TCODColor colS = TCODColor.lerp(colSW,colSE,dx);
-			TCODColor col = TCODColor.lerp(colN,colS,dy);
+			TCOD_color_t colNW = img.TCOD_image_get_pixel(iwx,iwy);
+			TCOD_color_t colNE = (iwx < w-1 ? img.TCOD_image_get_pixel(iwx+1,iwy) : colNW);
+			TCOD_color_t colSW = (iwy < h-1 ? img.TCOD_image_get_pixel(iwx,iwy+1) : colNW);
+			TCOD_color_t colSE = (iwx < w-1 && iwy < h-1 ? img.TCOD_image_get_pixel(iwx+1,iwy+1) : colNW);
+			TCOD_color_t colN = TCOD_color_lerp(colNW,colNE,dx);
+			TCOD_color_t colS = TCOD_color_lerp(colSW,colSE,dx);
+			TCOD_color_t col = TCOD_color_lerp(colN,colS,dy);
 			return col;
 		}
 
-		float getInterpolatedFloat(float *arr,float x,float y, int width, int height)
+		float getInterpolatedFloat(float[] arr, float x, float y, int width, int height)
 		{
-			float wx = clamp(0.0f, width-1,x);
-			float wy = clamp(0.0f, height-1,y);
+			float wx = clamp(0.0f, cast(float)width-1,x);
+			float wy = clamp(0.0f, cast(float)height-1,y);
 			int iwx = cast(int)wx;
 			int iwy = cast(int)wy;
 			float dx = wx - iwx;
@@ -997,9 +1022,9 @@ class WorldGenerator
 			int dx,dy;
 
 			// get a random point near the coast
-			sx = wgRng.getInt(0,HM_WIDTH-1);
-			sy = wgRng.getInt(HM_HEIGHT/5,4*HM_HEIGHT/5);
-			float h = hm.getValue(sx,sy);
+			sx = wgRng.TCOD_random_get_int(0,HM_WIDTH-1);
+			sy = wgRng.TCOD_random_get_int(HM_HEIGHT/5,4*HM_HEIGHT/5);
+			float h = hm.TCOD_heightmap_get_value(sx,sy);
 			while ( h <  sandHeight - 0.02 || h >= sandHeight ) 
 			{
 				sx++;
@@ -1009,37 +1034,39 @@ class WorldGenerator
 					sy++;
 					if ( sy == HM_HEIGHT ) sy=0;
 				}
-				h = hm.getValue(sx,sy);
+				h = hm.TCOD_heightmap_get_value(sx,sy);
 			}
-			TCODList!int tree;
-			TCODList!int randPt;
-			tree.push(sx+sy*HM_WIDTH);
+			SList!int tree;
+			SList!int randPt;
+			tree.insert(sx+sy*HM_WIDTH);
 			riverId++;
 			dx = sx;
 			dy = sy;
-			for (int i=0; i< wgRng.getInt(50,200); i++) 
+			for (int i=0; i< wgRng.TCOD_random_get_int(50,200); i++) 
 			{
-			    int rx = wgRng.getInt(sx-200,sx+200);
-			    int ry = wgRng.getInt(sy-200,sy+200);
+			    int rx = wgRng.TCOD_random_get_int(sx-200,sx+200);
+			    int ry = wgRng.TCOD_random_get_int(sy-200,sy+200);
 		//	    if ( inRectangle(rx,ry,HM_WIDTH,HM_HEIGHT) ) {
-		//	        float h=hm.getValue(rx,ry);
+		//	        float h=hm.TCOD_heightmap_get_value(rx,ry);
 		//	        if ( h >= sandHeight ) {
-			            randPt.push(rx+ry*HM_WIDTH);
+			            randPt.insert(rx+ry*HM_WIDTH);
 		//	        }
 		//	    }
 			}
 
-		    for (int i=0; i < randPt.size(); i++) 
+		    //for (int i=0; i < randPt.length; i++) 
+		    foreach(randPtEl; randPt)
 		    {
-		        int rx = randPt.get(i)%HM_WIDTH;
-		        int ry = randPt.get(i)/HM_WIDTH;
+		        int rx = randPtEl%HM_WIDTH;
+		        int ry = randPtEl/HM_WIDTH;
 
 		        float minDist = 1E10;
 		        int bestx = -1,besty = -1;
-		        for (int j=0;j < tree.size(); j++) 
+		        //for (int j=0;j < tree.length; j++) 
+		        foreach(treeEl; tree)
 		        {
-		            int tx=tree.get(j)%HM_WIDTH;
-		            int ty=tree.get(j)/HM_WIDTH;
+		            int tx = treeEl%HM_WIDTH;
+		            int ty = treeEl/HM_WIDTH;
 		            float dist = (tx-rx)*(tx-rx)+(ty-ry)*(ty-ry);
 		            if ( dist < minDist) 
 		            {
@@ -1048,7 +1075,7 @@ class WorldGenerator
 		                besty=ty;
 		            }
 		        }
-		        TCODLine.init(bestx,besty,rx,ry);
+		        TCOD_line_init(bestx, besty, rx, ry);
 
 		        int len = 3, cx = bestx, cy = besty;
 		        map_data_t *md = &mapData[cx+cy*HM_WIDTH];
@@ -1058,32 +1085,32 @@ class WorldGenerator
 		        {
 		            md =& mapData[cx+cy*HM_WIDTH];
 		            if (md.riverId > 0 ) return;
-			        float h=hm.getValue(cx,cy);
-			        if ( h >= sandHeight ) 
+			        float h2 = hm.TCOD_heightmap_get_value(cx,cy);
+			        if ( h2 >= sandHeight ) 
 			        {
-		                md.riverId = riverId;
-		                precipitation.setValue(cx,cy,1.0f);
+		                md.riverId = cast(ubyte)riverId;
+		                precipitation.TCOD_heightmap_set_value(cx,cy,1.0f);
 			        }
 			        if (cx ==0 || cx == HM_WIDTH-1 || cy == 0 || cy == HM_HEIGHT-1 ) len = 0;
-		            else if (TCODLine.step(&cx,&cy)) len=0;
+		            else if (TCOD_line_step(&cx,&cy)) len=0;
 		            len --;
 		        } while(len > 0 );
 		        int newNode = cx+cy*HM_WIDTH;
 		        if (newNode != bestx+besty*HM_WIDTH ) 
 		        {
-		            tree.push(newNode);
+		            tree.insert(newNode);
 		        }
 		    }			
 		}
 
 		void smoothPrecipitations()
 		{
-			float t0 = TCODSystem.getElapsedSeconds();
+			float t0 = TCOD_sys_elapsed_seconds();
 
 			// better quality polishing blur using a 5x5 kernel
 			// faster than TCODHeightmap kernelTransform function
-			TCODHeightMap temphm = TCODHeightMap(HM_WIDTH, HM_HEIGHT);
-			temphm.copy(precipitation);
+			TCOD_heightmap_t *temphm = TCOD_heightmap_new(HM_WIDTH, HM_HEIGHT);
+			TCOD_heightmap_copy(precipitation, temphm);
 			for (int i=4; i != 0; i--) 
 			{
 				for (int x=0; x < HM_WIDTH; x++) 
@@ -1101,11 +1128,11 @@ class WorldGenerator
 					{
 						for (int iy =miny; iy <= maxy; iy++) 
 						{
-							sum += precipitation.getValue(ix,iy);
+							sum += precipitation.TCOD_heightmap_get_value(ix,iy);
 							count++;
 						}
 					}
-					temphm.setValue(x,0,sum/count);
+					temphm.TCOD_heightmap_set_value(x,0,sum/count);
 
 					for (int y=1; y < HM_HEIGHT; y++) 
 					{
@@ -1114,7 +1141,7 @@ class WorldGenerator
 							// remove the top-line sum
 							for (int ix=minx; ix <= maxx; ix++) 
 							{
-								sum -= precipitation.getValue(ix,y-2);
+								sum -= precipitation.TCOD_heightmap_get_value(ix,y-2);
 								count--;
 							}
 						}
@@ -1123,23 +1150,23 @@ class WorldGenerator
 							// add the bottom-line sum
 							for (int ix=minx; ix <= maxx; ix++) 
 							{
-								sum += precipitation.getValue(ix,y+2);
+								sum += precipitation.TCOD_heightmap_get_value(ix,y+2);
 								count++;
 							}
 						}
-						temphm.setValue(x,y,sum/count);
+						temphm.TCOD_heightmap_set_value(x,y,sum/count);
 					}
 				}
 			}
-			precipitation.copy(&temphm);
+			TCOD_heightmap_copy(temphm, precipitation);
 
-			float t1 = TCODSystem.getElapsedSeconds();
-			DBG(("  Blur... %g\n", t1-t0 ));
+			float t1 = TCOD_sys_elapsed_seconds();
+			genLog("  Blur... ", t1-t0 );
 			t0=t1;
 
-			precipitation.normalize();
-			t1 = TCODSystem.getElapsedSeconds();
-			DBG(("  Normalization... %g\n", t1-t0 ));
+			precipitation.TCOD_heightmap_normalize(0.0f, 1.0f);
+			t1 = TCOD_sys_elapsed_seconds();
+			genLog("  Normalization... ", t1-t0 );
 			t0=t1;			
 		}
 
@@ -1150,32 +1177,29 @@ class WorldGenerator
 		    return 2;
 		}
 
-		void setLandMass(float percent, float waterLevel)
+		void setLandMass(float landMass, float waterLevel)
 		{
-			import std.c.string;
-
 			// fix land mass. We want a proportion of landMass above sea level
 			debug 
 			{
-				float t0=TCODSystem.getElapsedSeconds();
+				float t0 = TCOD_sys_elapsed_seconds();
 			}
 
 			int heightcount[256];
-			memset(heightcount.ptr,0,heightcount.length*int.sizeof);
-			for ( int x=0; x < HM_WIDTH; x++) 
+			for (int x=0; x < HM_WIDTH; x++) 
 			{
 			    for (int y=0; y < HM_HEIGHT; y++) 
 			    {
-					float h = hm.getValue(x,y);
+					float h = hm.TCOD_heightmap_get_value(x,y);
 					int ih = cast(int)(h*255);
 					ih = clamp(0,255,ih);
-					heightcount[ih]++;
+					heightcount[cast(size_t)ih]++;
 				}
 			}
 			int i=0, totalcount=0;
 			while (totalcount < HM_WIDTH*HM_HEIGHT*(1.0f-landMass) ) 
 			{
-				totalcount += heightcount[i];
+				totalcount += heightcount[cast(size_t)i];
 				i++;
 			}
 			float newWaterLevel=i/255.0f;
@@ -1186,7 +1210,7 @@ class WorldGenerator
 			{
 			    for (int y=0; y < HM_HEIGHT; y++) 
 			    {
-					float h = hm.getValue(x,y);
+					float h = hm.TCOD_heightmap_get_value(x,y);
 					if ( h > newWaterLevel ) 
 					{
 						h = waterLevel + (h-newWaterLevel)*landCoef;
@@ -1194,13 +1218,13 @@ class WorldGenerator
 					{
 						h = h * waterCoef;
 					}
-					hm.setValue(x,y,h);
+					hm.TCOD_heightmap_set_value(x,y,h);
 				}
 			}
 			debug
 			{
-				float t1=TCODSystem.getElapsedSeconds();
-				DBG(("  Landmass... %g\n", t1-t0 ));
+				float t1 = TCOD_sys_elapsed_seconds();
+				genLog("  Landmass... ", t1-t0 );
 			}
 		}
 
@@ -1218,14 +1242,14 @@ class WorldGenerator
 				latTemp = -30 + latTemp*60;
 				for (int x=0; x < HM_WIDTH; x++) 
 				{
-					float h0 = hm.getValue(x,y);
+					float h0 = hm.TCOD_heightmap_get_value(x,y);
 					float h = h0 - sandHeight;
 					if (h < 0.0f ) h *= waterCoef;
 					else h *= sandCoef;
 					float altShift = -35 * h;
 					float temp = latTemp+altShift;
-					temperature.setValue(x,y,temp);
-					float humid = precipitation.getValue(x,y);
+					temperature.TCOD_heightmap_set_value(x,y,temp);
+					float humid = precipitation.TCOD_heightmap_get_value(x,y);
 					// compute biome
 					EClimate climate = getClimateFromTemp(temp);
 					int iHumid = cast(int)(humid * 5);
@@ -1235,35 +1259,36 @@ class WorldGenerator
 				}
 			}
 			float min,max;
-			temperature.getMinMax(&min,&max);
-			DBG( ("Temperatures min/max: %g / %g\n",min,max));			
+			temperature.TCOD_heightmap_get_minmax(&min,&max);
+			genLog("Temperatures min/max: ", min, " / ", max);
 		}
 
-		TCODColor getBiomeColor(EBiome biome,int x,int y)
+		TCOD_color_t getBiomeColor(EBiome biome, int x, int y)
 		{
-		    static const TCODColor biomeColors[] = [
+		    static const TCOD_color_t biomeColors[] = 
+		    [
 			    // TUNDRA,
-			    TCODColor(200,240,255),
+			    TCOD_color_t(200,240,255),
 			    // COLD_DESERT,
-			    TCODColor(180,210,210),
+			    TCOD_color_t(180,210,210),
 			    // GRASSLAND,
-			    TCODColor.sea,
+			    TCOD_color_t(0, 255, 127),
 			    // BOREAL_FOREST,
-			    TCODColor(14,93,43),
+			    TCOD_color_t(14,93,43),
 			    // TEMPERATE_FOREST,
-			    TCODColor(44,177,83),
+			    TCOD_color_t(44,177,83),
 			    // TROPICAL_MONTANE_FOREST,
-			    TCODColor(185,232,164),
+			    TCOD_color_t(185,232,164),
 			    // HOT_DESERT,
-			    TCODColor(235,255,210),
+			    TCOD_color_t(235,255,210),
 			    // SAVANNA,
-			    TCODColor(255,205,20),
+			    TCOD_color_t(255,205,20),
 			    // TROPICAL_DRY_FOREST,
-			    TCODColor(60,130,40),
+			    TCOD_color_t(60,130,40),
 			    // TROPICAL_EVERGREEN_FOREST,
-			    TCODColor.green,
+			    TCOD_color_t(0, 255, 0),
 			    // THORN_FOREST,
-			    TCODColor(192,192,112),
+			    TCOD_color_t(192,192,112),
 		    ];
 		    int r = 0, g = 0, b = 0, count = 1;
 		    r += biomeColors[biome].r;
@@ -1271,14 +1296,14 @@ class WorldGenerator
 		    b += biomeColors[biome].b;
 		    for (int i = 0; i < 4; i++ ) 
 		    {
-		        int ix = x+wgRng.getInt(-10,10);
-		        int iy = y+wgRng.getInt(-10,10);
-		        if ( IN_RECTANGLE(ix,iy,HM_WIDTH,HM_HEIGHT) ) 
+		        int ix = x+wgRng.TCOD_random_get_int(-10,10);
+		        int iy = y+wgRng.TCOD_random_get_int(-10,10);
+		        if ( inRectangle(ix, iy, HM_WIDTH, HM_HEIGHT) ) 
 		        {
-		            TCODColor c = biomeColors[biomeMap[ix+iy*HM_WIDTH]];
-		            r += c.r + wgRng.getInt(-10,10);
-		            g += c.g + wgRng.getInt(-10,10);
-		            b += c.b + wgRng.getInt(-10,10);
+		            TCOD_color_t c = biomeColors[biomeMap[ix+iy*HM_WIDTH]];
+		            r += c.r + wgRng.TCOD_random_get_int(-10,10);
+		            g += c.g + wgRng.TCOD_random_get_int(-10,10);
+		            b += c.b + wgRng.TCOD_random_get_int(-10,10);
 		            count++;
 		        }
 		    }
@@ -1288,39 +1313,43 @@ class WorldGenerator
 		    r = clamp(0,255,r);
 		    g = clamp(0,255,g);
 		    b = clamp(0,255,b);
-		    return TCODColor(r,g,b);			
+		    return TCOD_color_t(cast(ubyte)r, cast(ubyte)g, cast(ubyte)b);			
 		}
 
 		void computePrecipitations()
 		{
+			TCOD_noise_t noise1d = TCOD_noise_new(1, 0.5f, 2.0f, wgRng);
+			TCOD_noise_t noise2d = TCOD_noise_new(2, 0.5f, 2.0f, wgRng);
+
 		    static const float waterAdd = 0.03f;
 		    static const float slopeCoef = 2.0f;
 		    static const float basePrecip = 0.01f; // precipitation coef when slope == 0
-			float t0=TCODSystem.getElapsedSeconds();
+			float t0 = TCOD_sys_elapsed_seconds();
 		    // north/south winds
 		    for (int diry=-1; diry <= 1; diry += 2 ) 
 		    {
 		        for (int x=0; x < HM_WIDTH; x++) 
 		        {
 		            float noisex = cast(float)(x)*5/HM_WIDTH;
-		            float waterAmount=(1.0f+noise1d.getFbmSimplex(&noisex,3.0f));
+		            noise1d.TCOD_noise_set_type(TCOD_NOISE_SIMPLEX);
+		            float waterAmount = (1.0f+noise1d.TCOD_noise_get_fbm(&noisex,3.0f));
 		            int starty = (diry == -1 ? HM_HEIGHT-1 : 0);
 		            int endy = (diry == -1 ? -1 : HM_HEIGHT);
 		            for (int y=starty; y != endy; y += diry) 
 		            {
-		                float h = hm.getValue(x,y);
+		                float h = hm.TCOD_heightmap_get_value(x,y);
 		                if ( h < sandHeight ) 
 		                {
 		                    waterAmount += waterAdd;
 		                } else if (waterAmount > 0.0f )
 		                {
 		                    float slope;
-		                    if ( cast(uint)(y + diry) < cast(uint)HM_HEIGHT ) slope = hm.getValue(x,y+diry) - h;
-		                    else slope = h - hm.getValue(x,y-diry);
+		                    if ( cast(uint)(y + diry) < cast(uint)HM_HEIGHT ) slope = hm.TCOD_heightmap_get_value(x,y+diry) - h;
+		                    else slope = h - hm.TCOD_heightmap_get_value(x,y-diry);
 		                    if ( slope >= 0.0f ) 
 		                    {
 		                        float precip = waterAmount * (basePrecip + slope * slopeCoef);
-		                        precipitation.setValue(x,y,precipitation.getValue(x,y)+precip);
+		                        precipitation.TCOD_heightmap_set_value(x,y,precipitation.TCOD_heightmap_get_value(x,y)+precip);
 		                        waterAmount -= precip;
 		                        waterAmount = cast(float)fmax(0.0f,waterAmount);
 		                    }
@@ -1328,8 +1357,8 @@ class WorldGenerator
 		            }
 		        }
 		    }
-			float t1=TCODSystem.getElapsedSeconds();
-			DBG(("  North/south winds... %g\n", t1-t0 ));
+			float t1 = TCOD_sys_elapsed_seconds();
+			genLog("  North/south winds... ", t1-t0 );
 			t0=t1;
 
 		    // east/west winds
@@ -1338,24 +1367,25 @@ class WorldGenerator
 		        for (int y=0; y < HM_HEIGHT; y++) 
 		        {
 		            float noisey = cast(float)(y)*5/HM_HEIGHT;
-		            float waterAmount=(1.0f+noise1d.getFbmSimplex(&noisey,3.0f));
+		            noise1d.TCOD_noise_set_type(TCOD_NOISE_SIMPLEX);
+		            float waterAmount=(1.0f+noise1d.TCOD_noise_get_fbm(&noisey,3.0f));
 		            int startx = (dirx == -1 ? HM_WIDTH-1 : 0);
 		            int endx = (dirx == -1 ? -1 : HM_WIDTH);
 		            for (int x=startx; x != endx; x += dirx) 
 		            {
-		                float h = hm.getValue(x,y);
+		                float h = hm.TCOD_heightmap_get_value(x,y);
 		                if ( h < sandHeight ) 
 		                {
 		                    waterAmount += waterAdd;
 		                } else if (waterAmount > 0.0f )
 		                {
 		                    float slope;
-		                    if ( cast(uint)(x + dirx) < cast(uint)HM_WIDTH ) slope = hm.getValue(x+dirx,y) - h;
-		                    else slope = h - hm.getValue(x-dirx,y);
+		                    if ( cast(uint)(x + dirx) < cast(uint)HM_WIDTH ) slope = hm.TCOD_heightmap_get_value(x+dirx,y) - h;
+		                    else slope = h - hm.TCOD_heightmap_get_value(x-dirx,y);
 		                    if ( slope >= 0.0f ) 
 		                    {
 		                        float precip = waterAmount * (basePrecip + slope * slopeCoef);
-		                        precipitation.setValue(x,y,precipitation.getValue(x,y)+precip);
+		                        precipitation.TCOD_heightmap_set_value(x,y,precipitation.TCOD_heightmap_get_value(x,y)+precip);
 		                        waterAmount -= precip;
 		                        waterAmount = cast(float)fmax(0.0f,waterAmount);
 		                    }
@@ -1363,43 +1393,46 @@ class WorldGenerator
 		            }
 		        }
 		    }
-			t1 = TCODSystem.getElapsedSeconds();
-			DBG(("  East/west winds... %g\n", t1-t0 ));
+			t1 = TCOD_sys_elapsed_seconds();
+			genLog("  East/west winds... ", t1-t0 );
 			t0=t1;
 
 			float min,max;
-			precipitation.getMinMax(&min,&max);
+			precipitation.TCOD_heightmap_get_minmax(&min,&max);
 
 		    // latitude impact
-			for (int y=HM_HEIGHT/4; y < 3*HM_HEIGHT/4; y++) 
+			for (int y = HM_HEIGHT/4; y < 3*HM_HEIGHT/4; y++) 
 			{
 		        // latitude (0 : equator, -1/1 : pole)
 		        float lat = cast(float)(y-HM_HEIGHT/4) * 2 / HM_HEIGHT ;
-		        float coef = sinf(2*3.1415926*lat );
+		        float coef = cast(float)sin(2*3.1415926*lat );
 		        for (int x=0; x < HM_WIDTH; x++) 
 		        {
 		            float f[2] = [ cast(float)(x)/HM_WIDTH, cast(float)(y)/HM_HEIGHT ];
-		            float xcoef = coef + 0.5f*noise2d.getFbmSimplex(f,3.0f);
-		            float precip = precipitation.getValue(x,y);
+		            noise2d.TCOD_noise_set_type(TCOD_NOISE_SIMPLEX);
+		            float xcoef = coef + 0.5f*noise2d.TCOD_noise_get_fbm(f,3.0f);
+		            float precip = precipitation.TCOD_heightmap_get_value(x,y);
 		            precip +=  (max-min) * xcoef * 0.1f;
-		            precipitation.setValue(x,y,precip);
+		            precipitation.TCOD_heightmap_set_value(x,y,precip);
 				}
 			}
-			t1 = TCODSystem.getElapsedSeconds();
-			DBG(("  latitude... %g\n", t1-t0 ));
+			t1 = TCOD_sys_elapsed_seconds();
+			genLog("  latitude... ", t1-t0 );
 			t0 = t1;
 
+			import std.c.string;
 			// very fast blur by scaling down and up
 			static const int factor=8;
 			static const int smallWidth = (HM_WIDTH+factor-1)/factor;
 			static const int smallHeight = (HM_HEIGHT+factor-1)/factor;
-			float *lowResMap = new float[smallWidth * smallHeight];
-			memset(lowResMap, 0, float.sizeof*smallWidth*smallHeight);
+			float[] lowResMap = new float[smallWidth * smallHeight];
+			memset(lowResMap.ptr, 0, float.sizeof*smallWidth*smallHeight);
+
 			for (int x=0; x < HM_WIDTH; x++) 
 			{
 				for (int y=0; y < HM_HEIGHT; y++) 
 				{
-					float v = precipitation.getValue(x,y);
+					float v = precipitation.TCOD_heightmap_get_value(x,y);
 					int ix = x/factor;
 					int iy = y/factor;
 					lowResMap[ix + iy*smallWidth ] += v;
@@ -1411,7 +1444,7 @@ class WorldGenerator
 				for (int y=0; y < HM_HEIGHT; y++) 
 				{
 					float v=getInterpolatedFloat(lowResMap,x*coef,y*coef,smallWidth,smallHeight);
-					precipitation.setValue(x,y,v);
+					precipitation.TCOD_heightmap_set_value(x,y,v);
 				}
 			}
 		}
@@ -1419,39 +1452,62 @@ class WorldGenerator
 		void computeColors()
 		{
 			// alter map color using temperature & precipitation maps
-			map_data_t *md = mapData;
-			for (int y=0; y < HM_HEIGHT; y++) 
+			//map_data_t *md = &mapData[0];
+			for (int yi = 0; yi < HM_HEIGHT; yi++) 
 			{
+				//genLog("y = ", yi);
 		        for (int x=0; x < HM_WIDTH; x++) 
 		        {
-					float h = hm.getValue(x,y);
-					float temp = temperature.getValue(x,y);
-					EBiome biome = biomeMap[x+y*HM_WIDTH];
-					TCODColor c;
+		        	//genLog("1 ", x, " ", yi, " ", HM_WIDTH, " ", HM_HEIGHT);
+					float h = hm.TCOD_heightmap_get_value(x,yi);
+					//genLog("1.1.1 y = ", yi);
+					float temp = temperature.TCOD_heightmap_get_value(x,yi);
+					//genLog("1.1.2 y = ", yi);
+					EBiome biome = biomeMap[x+yi*HM_WIDTH];
+					TCOD_color_t c;
+					//genLog("1.1 y = ", yi, " h < sandHeight ", h < sandHeight);
 					if (h < sandHeight ) c = getMapColor(h);
 					else 
 					{
 						c = getMapColor(h);
-		                c = TCODColor.lerp(c,getBiomeColor(biome,x,y),0.5f);
+						//genLog("1.2.1 y = ", yi);
+		                c = TCOD_color_lerp(c, getBiomeColor(biome,x,yi), 0.5f);
+		                //genLog("1.2.2 y = ", yi);
 					}
-
+					//genLog("2 y = ", yi);
 					// snow near poles
-					temp += 10*(clouds[HM_WIDTH-1-x][HM_HEIGHT-1-y]); // cheap 2D noise ;)
-					if ( temp < -10.0f && h < sandHeight ) worldmap.putPixel(x,y,TCODColor.lerp(TCODColor.white,c,0.3f));
-					else if ( temp < -8.0f && h < sandHeight ) worldmap.putPixel(x,y,TCODColor.lerp(TCODColor.white,c,0.3f + 0.7f * (10.0f+temp)/2.0f));
-					else if ( temp < -2.0f && h >= sandHeight) worldmap.putPixel(x,y,TCODColor.white);
+					temp += 10*(clouds[HM_WIDTH-1-x][HM_HEIGHT-1-yi]); // cheap 2D noise ;)
+					//genLog("2.1 y = ", yi);
+					if ( temp < -10.0f && h < sandHeight ) 
+					{
+						TCOD_image_put_pixel(worldmap, x, yi, TCOD_color_lerp(TCOD_color_t(255, 255, 255), c, 0.3f));
+						//genLog("2.deep y = ", yi, " worldmap = ", worldmap);
+					}
+					else if ( temp < -8.0f && h < sandHeight ) 
+					{
+						TCOD_image_put_pixel(worldmap, x, yi, TCOD_color_lerp(TCOD_color_t(255, 255, 255), c, 0.3f + 0.7f * (10.0f+temp)/2.0f));
+						//genLog("2.hallow y = ", yi, " worldmap = ", worldmap);
+					}
+					else if ( temp < -2.0f && h >= sandHeight) 
+					{
+						TCOD_image_put_pixel(worldmap, x, yi, TCOD_color_t(255, 255, 255));
+						//genLog("2.very hallow y = ", yi, " worldmap = ", worldmap);
+					}
 					else if ( temp < 2.0f && h >= sandHeight ) 
 					{
 						//TCODColor snow = mapGradient[cast(int)(snowHeight*255) + cast(int)((255 - cast(int)(snowHeight*255)) * (0.6f-temp)/0.4f)];
-						c = TCODColor.lerp(TCODColor.white,c,(temp+2)/4.0f);
-						worldmap.putPixel(x,y,c);
+						c = TCOD_color_lerp(TCOD_color_t(255, 255, 255), c, (temp+2)/4.0f);
+						TCOD_image_put_pixel(worldmap, x, yi, c);
+						//genLog("2.beach y = ", yi, " worldmap = ", worldmap);
 					} else 
 					{
-						worldmap.putPixel(x,y,c);
+						TCOD_image_put_pixel(worldmap, x, yi, c);
+						//genLog("2.earth y = ", yi, " worldmap = ", worldmap);
 					}
-					md++;
+					//genLog("3 y = ", yi);
 				}
 			}
+			
 			// draw rivers
 			/*
 			for (river_t **it=rivers.begin(); it != rivers.end(); it++) 
@@ -1468,23 +1524,48 @@ class WorldGenerator
 			    }
 			}
 			*/
-			md=mapData;
+			genLog("Drawing rivers");
+			foreach(river; rivers)
+			{
+				size_t i = 0;
+				foreach(coord; river.coords)
+				{
+					int strength = river.strength[i];
+			        int x = coord % HM_WIDTH;
+			        int y = coord / HM_WIDTH;
+			        TCOD_color_t c = worldmap.TCOD_image_get_pixel(x,y);
+			        c = TCOD_color_lerp(c, TCOD_color_t(0,0,255),cast(float)(strength)/5.0f);
+			        worldmap.TCOD_image_put_pixel(x,y,c);
+
+					i++;
+				}
+			}
+
+			/*size_t im = 0;
+			map_data_t md = mapData[im];
 			for (int y=0; y < HM_HEIGHT; y++) 
 			{
 		        for (int x=0; x < HM_WIDTH; x++) 
 		        {
-		            if ( md.riverId > 0 ) {
-		                TCODColor c= worldmap.getPixel(x,y);
-		                c = TCODColor.lerp(c,TCODColor.blue,0.3f);
-		                worldmap.putPixel(x,y,c);
+		        	genLog("1");
+		            if ( md.riverId > 0 ) 
+		            {
+		            	genLog("2");
+		                TCOD_color_t c = TCOD_image_get_pixel(worldmap, x,y);
+		                c = TCOD_color_lerp(c, TCOD_color_t(0,0,255), 0.3f);
+		                TCOD_image_put_pixel(worldmap, x,y,c);
 		            }
-		            md++;
+		            genLog("3");
+		            im++;
+		            md = mapData[im];
 		        }
-			}
+			}*/
+
+			genLog("Blur");
 			// blur
-			static const int dx[]=[0,-1,0,1,0];
-			static const int dy[]=[0,0,-1,0,1];
-			static const int coef[]=[1,2,2,2,2];
+			static const int[] dx = [0,-1,0,1,0];
+			static const int[] dy = [0,0,-1,0,1];
+			static const int[] coef = [1,2,2,2,2];
 			for (int x=0; x < HM_WIDTH; x++) 
 			{
 				for (int y=0; y < HM_HEIGHT; y++)
@@ -1494,9 +1575,9 @@ class WorldGenerator
 				    {
 				        int ix=x+dx[i];
 				        int iy=y+dy[i];
-				        if (IN_RECTANGLE(ix,iy,HM_WIDTH,HM_HEIGHT))
+				        if (inRectangle(ix,iy,HM_WIDTH,HM_HEIGHT))
 				        {
-				            TCODColor c=worldmap.getPixel(ix,iy);
+				            TCOD_color_t c = worldmap.TCOD_image_get_pixel(ix,iy);
 				            r += coef[i]*c.r;
 				            g += coef[i]*c.g;
 				            b += coef[i]*c.b;
@@ -1506,29 +1587,32 @@ class WorldGenerator
 		            r /= count;
 		            g /= count;
 		            b /= count;
-		            worldmap.putPixel(x,y,TCODColor(r,g,b));
+		            TCOD_image_put_pixel(worldmap, x, y, TCOD_color_t(cast(ubyte)r,cast(ubyte)g,cast(ubyte)b));
 				}
 			}
 			drawCoasts(worldmap);
+			genLog("computeColors finished");
 		}
 
-		void drawCoasts(TCODImage *img)
+		void drawCoasts(TCOD_image_t img)
 		{
 		    // detect coasts
 		    for (int x=0; x < HM_WIDTH-1; x++) 
 		    {
 		        for (int y=0; y < HM_HEIGHT-1; y++) 
 		        {
-		            float h = hm.getValue(x,y);
-		            float h2 = hm.getValue(x+1,y);
+		            float h = hm.TCOD_heightmap_get_value(x,y);
+		            float h2 = hm.TCOD_heightmap_get_value(x+1,y);
 		            if ( ( h < sandHeight && h2 >= sandHeight )
-		                || ( h2 < sandHeight && h >= sandHeight ) ) img.putPixel(x,y,TCODColor.black);
+		                || ( h2 < sandHeight && h >= sandHeight ) ) 
+		                	TCOD_image_put_pixel(img, x, y, TCOD_color_t(0,0,0));
 		            else 
 		            {
-		                h = hm.getValue(x,y);
-		                h2 = hm.getValue(x,y+1);
+		                h = hm.TCOD_heightmap_get_value(x,y);
+		                h2 = hm.TCOD_heightmap_get_value(x,y+1);
 		                if ( ( h < sandHeight && h2 >= sandHeight )
-		                    || ( h2 < sandHeight && h >= sandHeight ) ) img.putPixel(x,y,TCODColor.black);
+		                    || ( h2 < sandHeight && h >= sandHeight ) ) 
+		                    	TCOD_image_put_pixel(img, x, y, TCOD_color_t(0,0,0));
 		            }
 		        }
 		    }			
@@ -1541,8 +1625,6 @@ class WorldGenerator
 		    if ( temp <= 15 ) return EClimate.TEMPERATE;
 		    if ( temp <= 20 ) return EClimate.WARM;
 		    return EClimate.TROPICAL;			
-		}	
-	}
-}
-
+		}
+	}	
 }

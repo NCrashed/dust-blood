@@ -33,10 +33,12 @@ import vibe.core.core;
 import connection;
 import util.messages;
 import util.log;
+import util.world.world;
 
 import std.stdio;
 import std.string;
 import std.conv;
+import std.math;
 import std.concurrency;
 import std.c.stdlib;
 
@@ -48,16 +50,75 @@ enum VERSION = "0.0.1";
 enum CON_W = 80;
 enum CON_H = 50;
 
+TCOD_image_t map;
+static this()
+{
+	DerelictTCOD.load();
+}
+
+version(Windows)
+{
+	import core.sys.windows.windows;
+	extern(Windows) int closeHandle(DWORD dwCtrlType) nothrow
+	{
+		try
+		{
+			DerelictTCOD.unload();
+		} catch(Exception e)
+		{
+
+		}
+		exit(0);
+		return 0;
+	}
+}
+
 void drawThread()
 {
 	Tid parentTid = receiveOnly!Tid;
 	TCOD_console_init_root(CON_W, CON_H, "Dust & Blood v"~VERSION, false, TCOD_RENDERER_OPENGL);
+	TCOD_sys_set_fps(25);
+	TCOD_mouse_show_cursor(true);
+
+	map = TCOD_image_new(CON_W*2, CON_H*2);	
+	worldGen = new WorldGenerator;
+
+	// generate the world with all data (rain, temperature and so on...)
+	worldGen.generate(null);
+	// compute light intensity on ground (depends on light direction and ground slope)
+	static float lightDir[3] = 
+	[
+        1.0f,1.0f,0.0f
+    ];	
+	worldGen.computeSunLight(lightDir);
+
 	while( !TCOD_console_is_window_closed() )
 	{
-		TCOD_sys_check_for_event(TCOD_EVENT_KEY_PRESS, null, null);
+		/*TCOD_sys_check_for_event(TCOD_EVENT_KEY_PRESS, null, null);
 		TCOD_console_clear(null);
 		TCOD_console_set_char(null, 40, 25, '@');
-		TCOD_console_flush();
+		TCOD_console_flush();*/
+		
+		TCOD_key_t k;
+		TCOD_mouse_t mouse;
+		TCOD_sys_check_for_event(TCOD_EVENT_ANY, &k, &mouse);
+		if ( k.vk == TCODK_PRINTSCREEN ) 
+		{
+			// screenshot
+			if (! k.pressed ) TCOD_sys_save_screenshot("");
+			k.vk = TCODK_NONE;
+		} else if ( k.lalt && (k.vk == TCODK_ENTER || k.vk == TCODK_KPENTER) ) 
+		{
+			// switch fullscreen
+			//if (! k.pressed ) TCOD_console_set_fullscreen(!TCOD_console_is_fullscreen());
+			k.vk = TCODK_NONE;
+		}
+		// update the game
+		update(TCOD_sys_get_last_frame_length(), k, mouse);
+		// render the game screen
+		render();		
+		// flush updates to screen
+		TCOD_console_flush();		
 	}
 
 	parentTid.send(false);
@@ -65,7 +126,9 @@ void drawThread()
 
 void main(string[] args)
 {
-	DerelictTCOD.load();
+	version(Windows)
+		SetConsoleCtrlHandler(&closeHandle, true);
+
 	establishConnection("127.0.0.1", 7);
 
 	while(!isConnected())
@@ -93,97 +156,103 @@ void main(string[] args)
 		processEvents();
 	}
 
-	DerelictTCOD.unload();
-	exit(0);
 }
 
-/*
 WorldGenerator worldGen;
 
 // world map panning
-float wx = 0, wy = 0, curwx = 0, curwy = 0;
+float curwx = 0, curwy = 0;
 // mouse coordinates in world map
 float mx = 0, my = 0;
 
 void update(float elapsed, TCOD_key_t k, TCOD_mouse_t mouse) 
 {
+	float wx = 0, wy = 0;
 	// destination wanted
-	wx = (worldGen.getWidth()-2*WIDTH) * mouse.cx / WIDTH;
-	wy = (worldGen.getHeight()-2*HEIGHT) * mouse.cy / HEIGHT;
+	wx = (worldGen.width-2*CON_W) * mouse.cx / CON_W;
+	wy = (worldGen.height-2*CON_H) * mouse.cy / CON_H;
 	curwx += (wx-curwx)*elapsed;
 	curwy += (wy-curwy)*elapsed;
 	mx = curwx + mouse.cx*2;
 	my = curwy + mouse.cy*2;
+
 	worldGen.updateClouds(elapsed);	
 }
 
 
-TCODColor getMapShadedColor(float worldX,float worldY,bool clouds) 
+TCOD_color_t getMapShadedColor(float worldX, float worldY, bool clouds) 
 {
     // sun color 
-    static TCODColor = sunCol(255,255,200);
+    static TCOD_color_t sunCol = TCOD_color_t(255,255,200);
 
-    float wx = CLAMP(0.0f, worldGen.getWidth()-1,worldX);
-    float wy = CLAMP(0.0f, worldGen.getHeight()-1,worldY);
+    float wx = clamp(0.0f, cast(float)worldGen.width-1,worldX);
+    float wy = clamp(0.0f, cast(float)worldGen.height-1,worldY);
 
-	// apply cloud shadow
-	float cloudAmount = clouds ? worldGen.getCloudThickness(wx,wy) : 0.0f;
-	TCODColor col = worldGen.getInterpolatedColor(worldX,worldY);
+	// apply cloud shadow 
+	// FIXME: CLOUD INTERPOLATION BUG
+	float cloudAmount = clouds ? worldGen.getCloudThickness(wx, wy) : 0.0f;
+	TCOD_color_t col = worldGen.getInterpolatedColor(worldX, worldY);
 	
 	// apply sun light
     float intensity = worldGen.getInterpolatedIntensity(wx,wy);
-	intensity = MIN(intensity, 1.5f-cloudAmount);
-	int cr = cast(int)(intensity*cast(int)(col.r)*sunCol.r/255 );
-	int cg = cast(int)(intensity*cast(int)(col.g)*sunCol.g/255 );
-	int cb = cast(int)(intensity*cast(int)(col.b)*sunCol.b/255 );
+	intensity = cast(float)fmin(intensity, 1.5f-cloudAmount);
+	int cr = cast(int)(intensity*cast(int)(col.r)*(sunCol.r/255.0f) );
+	int cg = cast(int)(intensity*cast(int)(col.g)*(sunCol.g/255.0f) );
+	int cb = cast(int)(intensity*cast(int)(col.b)*(sunCol.b/255.0f) );
 	
-	TCODColor col2;
-	col2.r = CLAMP(0,255,cr);
-	col2.g = CLAMP(0,255,cg);
-	col2.b = CLAMP(0,255,cb);
-	col2.r = MAX(col2.r,col.r/2);
-	col2.g = MAX(col2.g,col.g/2);
-	col2.b = MAX(col2.b,col.b/2);
+	TCOD_color_t col2;
+	col2.r = cast(ubyte)clamp(0,255,cr);
+	col2.g = cast(ubyte)clamp(0,255,cg);
+	col2.b = cast(ubyte)clamp(0,255,cb);
+	col2.r = cast(ubyte)fmax(col2.r,col.r/2);
+	col2.g = cast(ubyte)fmax(col2.g,col.g/2);
+	col2.b = cast(ubyte)fmax(col2.b,col.b/2);
 	return col2;
 }
 
 void render() 
 {
-	// subcell resolution image
-	static TCODImage map = TCODImage(CON_W*2,CON_H*2);
 	// compute the map image
-	for (int px=0; px <2*CON_W; px++) {
-		for (int py=0; py <2*CON_H; py++) {
+	for (int px=0; px <2*CON_W; px++) 
+	{
+		for (int py=0; py <2*CON_H; py++) 
+		{
 		    // world texel coordinate (with fisheye distorsion)
 		    float wx = px+curwx;
 		    float wy = py+curwy;
-			map.putPixel(px,py,getMapShadedColor(wx,wy,true));
+			TCOD_image_put_pixel(map, px,py, getMapShadedColor(wx,wy,true));
 		}
 	}
-	map.blit2x(TCODConsole.root,0,0);
+	TCOD_image_blit_2x(map, null, 0, 0, 0, 0, worldGen.width, worldGen.height);
 	
-	TCODConsole.root.setDefaultForeground(TCODColor.white);
+	TCOD_console_set_default_foreground(null, TCOD_color_t(255, 255, 255));
 	static string biomeNames[] = [
 		"Tundra","Cold desert","Grassland", "Boreal forest",
 		"Temperate forest", "Tropical/Montane forest",
 		"Hot desert", "Savanna", "Tropical dry forest", "Tropical evergreen forest",
 		"Thorn forest"
 	];
-	if ( worldGen.isOnSea(mx,my) ) {
+
+	mx = clamp(0.0f, cast(float)worldGen.width-1, mx);
+	my = clamp(0.0f, cast(float)worldGen.height-1, my);
+	if ( worldGen.isOnSea(mx,my) ) 
+	{
+		string msg = text("Alt ", worldGen.getRealAltitude(mx,my), "m\n",
+			"Move the mouse to scroll the map");
 		// some information are irrelevant on sea
-		TCODConsole.root.print(5,47,"Alt %5dm\n\nMove the mouse to scroll the map",
-			cast(int)worldGen.getRealAltitude(mx,my)
-		);
-	} else {
-		TCODConsole.root.print(5,47,"Alt %5dm  Prec %3dcm/sq. m/y  Temp %d deg C\nBiome : %s\nMove the mouse to scroll the map",
-			cast(int)worldGen.getRealAltitude(mx,my),
-			cast(int)worldGen.getPrecipitations(mx,my),
-			cast(int)worldGen.getTemperature(mx,my),
-			biomeNames[worldGen.getBiome(mx,my)]
-		);
+		TCOD_console_print(null, 5, 47, toStringz(msg));
+	} else 
+	{
+		string msg = text("Alt ", worldGen.getRealAltitude(mx,my), 
+			" Prec ", worldGen.getPrecipitations(mx,my), " cm/sq. m/y",
+			" Temp ", worldGen.getTemperature(mx,my), " deg C\n",
+			"Biome : "~biomeNames[worldGen.getBiome(mx,my)]~"\n",
+			"Move the mouse to scroll the map");
+		TCOD_console_print(null, 5, 47, toStringz(msg));
 	}
 }
 
+/*
 int main (string[] args) 
 {
 	// initialize the game window

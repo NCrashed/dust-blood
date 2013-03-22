@@ -58,7 +58,6 @@ int main(string[] args)
 				readObjects(buff, msgs, summ, rest);
 				foreach(msg; msgs)
 				{
-
 					msg(conn);
 				}
 			}

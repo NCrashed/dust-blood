@@ -47,8 +47,8 @@ import core.time;
 
 enum VERSION = "0.0.1";
 
-enum CON_W = 80;
-enum CON_H = 50;
+enum CON_W = 170;
+enum CON_H = 100;
 
 TCOD_image_t map;
 static this()
@@ -240,7 +240,7 @@ void render()
 		string msg = text("Alt ", worldGen.getRealAltitude(mx,my), "m\n",
 			"Move the mouse to scroll the map");
 		// some information are irrelevant on sea
-		TCOD_console_print(null, 5, 47, toStringz(msg));
+		TCOD_console_print(null, 5, CON_H-3, toStringz(msg));
 	} else 
 	{
 		string msg = text("Alt ", worldGen.getRealAltitude(mx,my), 
@@ -248,6 +248,6 @@ void render()
 			" Temp ", worldGen.getTemperature(mx,my), " deg C\n",
 			"Biome : "~biomeNames[worldGen.getBiome(mx,my)]~"\n",
 			"Move the mouse to scroll the map");
-		TCOD_console_print(null, 5, 47, toStringz(msg));
+		TCOD_console_print(null, 5, CON_H-4, toStringz(msg));
 	}
 }

@@ -25,67 +25,48 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 */
 /**
-*	Container contains widgets.
+*	Gui static image.
 *	It is port of C++ libtcod-gui library.
 *
 *	Authors: Gushcha Anton, Jice & Mingos
 *	License: Boost v1.0
 */
-module gui.container;
+module gui.image;
 
 import derelict.tcod.libtcod;
 import gui.widget;
-import std.container;
-import std.algorithm;
-import std.range;
 
-class Container : Widget
+class Image : Widget
 {
 	public
 	{
-		this(int x, int y, int w, int h)
+		this(int x, int y, int w, int h, string tip = "")
 		{
 			super(x, y, w, h);
+			back = TCOD_color_t(0, 0, 0);
+			setTip(tip);
 		}
 
-		final void addWidget(Widget widget)
+		void setBackgroundColor(const TCOD_color_t col)
 		{
-			content.insert(widget);
-			widgets.linearRemove(find(widgets[], widget).take(1));
-		}
-
-		final void removeWidget(Widget widget)
-		{
-			auto range = find(content[], widget);
-			content.linearRemove(find(content[], widget).take(1));
+			back = col;
+			TCOD_console_rect(con, x, y, w, h, true, TCOD_BKGND_SET);
 		}
 
 		override void render()
 		{
-			foreach(wid; content)
-			{
-				if (wid.isVisible())
-					wid.render();
-			}
-		}
+			TCOD_console_set_default_background(con, back);
 
-		final void clear()
-		{
-			content.clear();
-		}
-
-		override void update(const TCOD_key_t k)
-		{
-			super.update(k);
-			foreach(wid; content)
-			{
-				if(wid.isVisible())
-					wid.update(k);
-			}
 		}
 	}
 	protected
 	{
-		DList!Widget content;
+		override void expand(int width, int height)
+		{
+			if (width > w) w = width;
+			if (height > h) h = height;
+		}
+
+		TCOD_color_t back;
 	}
 }

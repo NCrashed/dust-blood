@@ -38,8 +38,8 @@ import util.log;
 public
 {
 	// size of the heightmap
-	enum HM_WIDTH = 400;
-	enum HM_HEIGHT = 400;
+	enum HM_WIDTH = 800;
+	enum HM_HEIGHT = 800;
 
 	// biome and climate list. based on Whittaker Biome Diagram
 	enum EClimate 

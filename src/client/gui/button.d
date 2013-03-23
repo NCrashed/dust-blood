@@ -25,67 +25,110 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 */
 /**
-*	Container contains widgets.
+*	Clickable button.
 *	It is port of C++ libtcod-gui library.
 *
 *	Authors: Gushcha Anton, Jice & Mingos
 *	License: Boost v1.0
 */
-module gui.container;
+module gui.button;
 
 import derelict.tcod.libtcod;
 import gui.widget;
-import std.container;
-import std.algorithm;
-import std.range;
+import std.string;
 
-class Container : Widget
+class Button : Widget
 {
 	public
 	{
-		this(int x, int y, int w, int h)
+		this(string label, string tip, widgetCallback cbk)
 		{
-			super(x, y, w, h);
+			pressed = false;
+			setLabel(label);
+			setTip(tip);
+			this.x = 0;
+			this.y = 0;
+			this.cbk = cbk;
 		}
 
-		final void addWidget(Widget widget)
+		this(int x, int y, int width, int height, string label, widgetCallback cbk, string tip = "")
 		{
-			content.insert(widget);
-			widgets.linearRemove(find(widgets[], widget).take(1));
-		}
-
-		final void removeWidget(Widget widget)
-		{
-			auto range = find(content[], widget);
-			content.linearRemove(find(content[], widget).take(1));
+			pressed = false;
+			setLabel(label);
+			setTip(tip);
+			this.w = width;
+			this.h = height;
+			this.x = x;
+			this.y = y;
+			this.cbk = cbk;
 		}
 
 		override void render()
 		{
-			foreach(wid; content)
+			TCOD_console_set_default_background(con, mouseIn ? backFocus : back);
+			TCOD_console_set_default_foreground(con, mouseIn ? foreFocus : fore);
+			if (w > 0 && h > 0) TCOD_console_rect(con, x, y, w, h, true, TCOD_BKGND_SET);
+			if (label.length > 0)
 			{
-				if (wid.isVisible())
-					wid.render();
+				if (pressed && mouseIn)
+				{
+					TCOD_console_print_ex(con, x+w/2, y, TCOD_BKGND_NONE, TCOD_CENTER, toStringz("-"~label~'-'));
+				} else
+				{
+					TCOD_console_print_ex(con, x+w/2, y, TCOD_BKGND_NONE, TCOD_CENTER, toStringz(label));
+				}
 			}
 		}
 
-		final void clear()
+		final void setLabel(string newLabel)
 		{
-			content.clear();
+			label = newLabel;
 		}
 
-		override void update(const TCOD_key_t k)
+		override void computeSize()
 		{
-			super.update(k);
-			foreach(wid; content)
+			if(label.length > 0)
 			{
-				if(wid.isVisible())
-					wid.update(k);
+				w = label.length + 2;
+			} else 
+			{
+				w = 4;
 			}
+			h = 1;
+		}
+
+		final bool isPressed()
+		{
+			return pressed;
 		}
 	}
 	protected
 	{
-		DList!Widget content;
+		bool pressed;
+		string label;
+		widgetCallback cbk;
+
+		override void onButtonPress()
+		{
+			pressed = true;
+			super.onButtonPress();
+		}
+
+		override void onButtonRelease()
+		{
+			pressed = false;
+			super.onButtonRelease();
+		}
+
+		override void onButtonClick()
+		{
+			super.onButtonClick();
+			if (cbk !is null) cbk(this);
+		}
+
+		override void expand(int width, int height)
+		{
+			if (w < width) w = width;
+		}
 	}
 }

@@ -25,67 +25,52 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 */
 /**
-*	Container contains widgets.
+*	Static text label.
 *	It is port of C++ libtcod-gui library.
 *
 *	Authors: Gushcha Anton, Jice & Mingos
 *	License: Boost v1.0
 */
-module gui.container;
+module gui.label;
 
 import derelict.tcod.libtcod;
 import gui.widget;
-import std.container;
-import std.algorithm;
-import std.range;
+import std.string;
 
-class Container : Widget
+class Label : Widget 
 {
 	public
 	{
-		this(int x, int y, int w, int h)
+		this(int x, int y, string label, string tip = "")
 		{
-			super(x, y, w, h);
-		}
-
-		final void addWidget(Widget widget)
-		{
-			content.insert(widget);
-			widgets.linearRemove(find(widgets[], widget).take(1));
-		}
-
-		final void removeWidget(Widget widget)
-		{
-			auto range = find(content[], widget);
-			content.linearRemove(find(content[], widget).take(1));
+			super(x, y, 0, 1);
+			setTip(tip);
 		}
 
 		override void render()
 		{
-			foreach(wid; content)
-			{
-				if (wid.isVisible())
-					wid.render();
-			}
+			TCOD_console_set_default_background(con, back);
+			TCOD_console_set_default_foreground(con, fore);
+			TCOD_console_print_ex(con, x, y, TCOD_BKGND_NONE, TCOD_LEFT, toStringz(label));
 		}
 
-		final void clear()
+		override void computeSize()
 		{
-			content.clear();
+			w = label.length;
 		}
 
-		override void update(const TCOD_key_t k)
+		void setValue(string label)
 		{
-			super.update(k);
-			foreach(wid; content)
-			{
-				if(wid.isVisible())
-					wid.update(k);
-			}
+			this.label = label;
 		}
 	}
 	protected
 	{
-		DList!Widget content;
+		string label;
+
+		override void expand(int width, int height)
+		{
+			if (w < width) w = width;
+		}
 	}
 }

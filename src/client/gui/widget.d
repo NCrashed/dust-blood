@@ -28,7 +28,7 @@ DEALINGS IN THE SOFTWARE.
 *	Base widget for other gui elements.
 *	It is port of C++ libtcod-gui library.
 *
-*	Author: Gushcha Anton
+*	Authors: Gushcha Anton, Jice & Mingos
 *	License: Boost v1.0
 */
 module gui.widget;
